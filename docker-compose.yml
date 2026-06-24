@@ -1,0 +1,74 @@
+# docker-compose.yml
+services:
+  # The Primary Database (Postgres)
+  db:
+    image: postgres:17-alpine
+    container_name: agency-postgres-db
+    restart: always
+    environment:
+      POSTGRES_USER: agency_dev
+      POSTGRES_PASSWORD: agency_password
+      POSTGRES_DB: client_project_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agency_dev -d client_project_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: agency-redis-cache
+    restart: always
+    ports:
+      - "6379:6379"
+
+  # Enterprise RAG AI Engine (Python / FastAPI)
+  ai-engine:
+    build:
+      context: ./ai-engine
+      dockerfile: Dockerfile
+    container_name: agency-ai-engine
+    restart: always
+    env_file:
+      - ./ai-engine/.env
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Lumina Web Frontend (Next.js)
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: lumina-web
+    restart: always
+    environment:
+      NEXT_PUBLIC_AI_ENGINE_URL: http://ai-engine:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - ai-engine
+
+  # The Visual Database Manager (pgAdmin)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: agency-pgadmin-ui
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@agency.com
+      PGADMIN_DEFAULT_PASSWORD: admin_password
+    ports:
+      - "5050:80"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:

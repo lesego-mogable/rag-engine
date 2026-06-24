@@ -1,0 +1,19 @@
+# Python environment
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Local environment variables
+.env
+.env.*
+
+# Build / dist
+dist/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/

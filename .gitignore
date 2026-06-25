@@ -10,9 +10,11 @@ build/
 .expo/
 
 # Python & AI Engine dependencies
-apps/ai-engine/venv/
-apps/ai-engine/__pycache__/
+ai-engine/.venv/
+ai-engine/venv/
+**/__pycache__/
 *.pyc
+*.pyo
 
 # Local Environment Variables (CAF Security Mandate)
 .env

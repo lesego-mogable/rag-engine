@@ -31,7 +31,7 @@ export function ChatView() {
     feedEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  function sendMessage(text: string) {
+  async function sendMessage(text: string) {
     const trimmed = text.trim();
     if (!trimmed) return;
     const userId = crypto.randomUUID();
@@ -42,6 +42,25 @@ export function ChatView() {
       { id: assistantId, role: "assistant", content: "", pending: true },
     ]);
     setInput("");
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: trimmed }),
+      });
+      const data = await res.json();
+      const answer = res.ok ? data.answer : (data.error ?? "Something went wrong.");
+      setMessages((prev) =>
+        prev.map((m) => m.id === assistantId ? { ...m, content: answer, pending: false } : m)
+      );
+    } catch {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId ? { ...m, content: "Failed to reach the AI engine.", pending: false } : m
+        )
+      );
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -65,14 +84,10 @@ export function ChatView() {
   }
 
   function handleRegenerate() {
-    setMessages((prev) => {
-      const withoutLast = [...prev];
-      while (withoutLast.length && withoutLast[withoutLast.length - 1].role === "assistant") {
-        withoutLast.pop();
-      }
-      const newId = crypto.randomUUID();
-      return [...withoutLast, { id: newId, role: "assistant", content: "", pending: true }];
-    });
+    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+    if (!lastUserMsg) return;
+    setMessages((prev) => prev.filter((m) => m.role !== "assistant" || prev.indexOf(m) < prev.findLastIndex((x) => x.role === "user")));
+    sendMessage(lastUserMsg.content);
   }
 
   function handleShare() {

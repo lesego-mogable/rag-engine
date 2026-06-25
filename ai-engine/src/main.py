@@ -1,5 +1,4 @@
-# /apps/ai-engine/src/main.py
-
+import logging
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
@@ -10,14 +9,20 @@ from src.services import ingest as ingest_service
 
 load_dotenv()
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s — %(message)s",
+    datefmt="%H:%M:%S",
+)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Initializing Semantic Kernel and Azure Connections...")
+    print("Initializing Azure connections...")
     try:
-        kernel, memory = await initialize_rag_kernel()
-        app.state.kernel = kernel
-        app.state.memory = memory
+        openai_client, search_client = await initialize_rag_kernel()
+        app.state.openai_client = openai_client
+        app.state.search_client = search_client
         print("AI Engine ready.")
     except Exception as e:
         print(f"Failed to initialize AI Engine: {e}")
@@ -42,19 +47,17 @@ class QueryResponse(BaseModel):
 
 @app.post("/api/v1/query", response_model=QueryResponse)
 async def query_enterprise_data(body: QueryRequest, request: Request):
-    kernel = getattr(request.app.state, "kernel", None)
-    memory = getattr(request.app.state, "memory", None)
-    index_name = os.getenv("AZURE_AI_SEARCH_INDEX_NAME", "enterprise-docs-index")
+    openai_client = getattr(request.app.state, "openai_client", None)
+    search_client = getattr(request.app.state, "search_client", None)
 
-    if not kernel or not memory:
+    if not openai_client or not search_client:
         raise HTTPException(status_code=503, detail="AI Engine is not initialized.")
 
     try:
         answer = await execute_rag_query(
             query=body.query,
-            kernel=kernel,
-            memory=memory,
-            index_name=index_name,
+            openai_client=openai_client,
+            search_client=search_client,
         )
         return QueryResponse(answer=answer)
     except Exception as e:
@@ -63,4 +66,4 @@ async def query_enterprise_data(body: QueryRequest, request: Request):
 
 @app.get("/health")
 async def health_check(request: Request):
-    return {"status": "healthy", "kernel_loaded": hasattr(request.app.state, "kernel")}
+    return {"status": "healthy", "kernel_loaded": hasattr(request.app.state, "openai_client")}

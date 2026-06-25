@@ -1,98 +1,139 @@
-# /apps/ai-engine/src/kernel.py
-
+import asyncio
+import logging
 import os
-from azure.identity.aio import DefaultAzureCredential
-from semantic_kernel import Kernel
-from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding
-from semantic_kernel.connectors.memory.azure_cognitive_search import AzureCognitiveSearchMemoryStore
-from semantic_kernel.memory.semantic_text_memory import SemanticTextMemory
-from semantic_kernel.prompt_template.prompt_template_config import PromptTemplateConfig
+from openai import AsyncAzureOpenAI, NotFoundError
 
-async def initialize_rag_kernel() -> tuple[Kernel, SemanticTextMemory]:
-    """
-    Initializes Semantic Kernel using Microsoft Entra ID (DefaultAzureCredential).
-    """
-    kernel = Kernel()
-    credential = DefaultAzureCredential()
+logger = logging.getLogger(__name__)
+from azure.core.credentials import AzureKeyCredential
+from azure.search.documents.aio import SearchClient
+from azure.search.documents.indexes import SearchIndexClient
+from azure.search.documents.indexes.models import (
+    SearchIndex,
+    SimpleField,
+    SearchableField,
+    SearchField,
+    SearchFieldDataType,
+    VectorSearch,
+    HnswAlgorithmConfiguration,
+    VectorSearchProfile,
+)
 
-    # Retrieve endpoints (Injected securely at runtime)
-    aoai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-    chat_deployment = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT", "gpt-4o")
-    embedding_deployment = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "text-embedding-3-small")
+
+def _ensure_search_index(endpoint: str, admin_key: str, index_name: str) -> None:
+    credential = AzureKeyCredential(admin_key)
+    index_client = SearchIndexClient(endpoint=endpoint, credential=credential)
+
+    existing = list(index_client.list_index_names())
+    if index_name in existing:
+        return
+
+    fields = [
+        SimpleField(name="id", type=SearchFieldDataType.String, key=True),
+        SearchableField(name="content", type=SearchFieldDataType.String),
+        SearchField(
+            name="content_vector",
+            type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
+            searchable=True,
+            vector_search_dimensions=1536,
+            vector_search_profile_name="default-profile",
+        ),
+        SimpleField(name="document_id", type=SearchFieldDataType.String, filterable=True),
+        SimpleField(name="blob_name", type=SearchFieldDataType.String),
+        SimpleField(name="chunk_index", type=SearchFieldDataType.Int32),
+    ]
+
+    vector_search = VectorSearch(
+        algorithms=[HnswAlgorithmConfiguration(name="hnsw")],
+        profiles=[VectorSearchProfile(name="default-profile", algorithm_configuration_name="hnsw")],
+    )
+
+    index = SearchIndex(name=index_name, fields=fields, vector_search=vector_search)
+    index_client.create_index(index)
+    print(f"Created AI Search index: {index_name}")
+
+
+async def initialize_rag_kernel():
+    openai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+    openai_api_key = os.getenv("AZURE_OPENAI_API_KEY")
     search_endpoint = os.getenv("AZURE_AI_SEARCH_ENDPOINT")
+    search_admin_key = os.getenv("AZURE_AI_SEARCH_ADMIN_KEY")
+    index_name = os.getenv("AZURE_AI_SEARCH_INDEX_NAME", "enterprise-docs-index")
 
-    if not aoai_endpoint or not search_endpoint:
-        raise ValueError("Critical Azure endpoints are missing from the environment.")
+    if not all([openai_endpoint, openai_api_key, search_endpoint, search_admin_key]):
+        raise ValueError("Missing required Azure configuration in environment.")
 
-    # Attach Azure OpenAI Services
-    chat_service = AzureChatCompletion(
-        service_id="default",
-        deployment_name=chat_deployment,
-        endpoint=aoai_endpoint,
-        ad_token_provider=credential.get_token
+    openai_client = AsyncAzureOpenAI(
+        azure_endpoint=openai_endpoint,
+        api_key=openai_api_key,
+        api_version="2024-10-21",
     )
-    embedding_service = AzureTextEmbedding(
-        deployment_name=embedding_deployment,
-        endpoint=aoai_endpoint,
-        ad_token_provider=credential.get_token
-    )
-    kernel.add_service(chat_service)
-    kernel.add_service(embedding_service)
 
-    # Attach Azure AI Search (Vector Memory)
-    vector_store = AzureCognitiveSearchMemoryStore(
+    _ensure_search_index(search_endpoint, search_admin_key, index_name)
+
+    search_client = SearchClient(
         endpoint=search_endpoint,
-        credentials=credential
-    )
-    memory = SemanticTextMemory(
-        storage=vector_store,
-        embeddings_generator=embedding_service
+        index_name=index_name,
+        credential=AzureKeyCredential(search_admin_key),
     )
 
-    return kernel, memory
+    return openai_client, search_client
 
-async def execute_rag_query(query: str, kernel: Kernel, memory: SemanticTextMemory, index_name: str) -> str:
-    """
-    Retrieves grounded context and executes the RAG prompt.
-    """
-    search_results = await memory.search(
-        collection=index_name,
-        query=query,
-        limit=3,
-        min_relevance_score=0.75
+
+async def execute_rag_query(query: str, openai_client: AsyncAzureOpenAI, search_client: SearchClient) -> str:
+    embedding_deployment = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "text-embedding-3-small")
+    chat_deployment = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT", "gpt-4.1-mini")
+
+    embedding_response = await openai_client.embeddings.create(
+        input=query,
+        model=embedding_deployment,
+    )
+    query_vector = embedding_response.data[0].embedding
+
+    from azure.search.documents.models import VectorizedQuery
+    vector_query = VectorizedQuery(vector=query_vector, k_nearest_neighbors=3, fields="content_vector")
+
+    results = await search_client.search(
+        search_text=None,
+        vector_queries=[vector_query],
+        select=["content", "document_id"],
+        top=3,
     )
 
-    grounding_context = "\n---\n".join([result.text for result in search_results])
+    chunks = []
+    async for result in results:
+        chunks.append(result["content"])
 
-    if not grounding_context:
+    if not chunks:
         return "I could not find any relevant information in the internal knowledge base."
 
-    prompt = """
-    You are an elite enterprise AI assistant. Answer the user's question using ONLY the provided context.
-    If the context does not contain the answer, state explicitly that you do not know. 
-    Do not use external knowledge.
+    grounding_context = "\n---\n".join(chunks)
 
-    CONTEXT:
-    {{$context}}
-
-    USER QUESTION:
-    {{$query}}
-    """
-
-    req_settings = kernel.get_prompt_execution_settings_from_service_id(service_id="default")
-    req_settings.temperature = 0.0 # Strictly factual
-    
-    rag_function = kernel.create_function_from_prompt(
-        prompt_template=prompt,
-        plugin_name="EnterpriseRAG",
-        function_name="AskGroundedQuestion",
-        prompt_execution_settings=req_settings
-    )
-
-    result = await kernel.invoke(
-        rag_function,
-        query=query,
-        context=grounding_context
-    )
-
-    return str(result)
+    for attempt in range(3):
+        try:
+            completion = await openai_client.chat.completions.create(
+                model=chat_deployment,
+                temperature=0.0,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are an enterprise AI assistant. "
+                            "Answer using ONLY the provided context. "
+                            "If the context does not contain the answer, say you don't know. "
+                            "Do not use external knowledge."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Context:\n{grounding_context}\n\nQuestion: {query}",
+                    },
+                ],
+            )
+            return completion.choices[0].message.content
+        except NotFoundError:
+            if attempt < 2:
+                wait = 2 ** attempt
+                logger.warning("[query] DeploymentNotFound on attempt %d, retrying in %ds", attempt + 1, wait)
+                await asyncio.sleep(wait)
+            else:
+                raise

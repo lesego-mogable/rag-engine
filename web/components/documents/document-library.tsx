@@ -520,8 +520,8 @@ export function DocumentLibrary() {
                     </span>
                   </div>
                   {doc.errorMsg && (
-                    <div className="mt-1 text-[10px] truncate" style={{ color: "#ef4444" }} title={doc.errorMsg}>
-                      {doc.errorMsg}
+                    <div className="mt-1 text-[10px] break-words" style={{ color: "#ef4444" }} title={doc.errorMsg}>
+                      {doc.errorMsg.split("\n")[0]}
                     </div>
                   )}
                 </div>

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { SourcesPanel } from "./sources-panel";
+import { UserAvatar } from "@/components/user-avatar";
 
 interface Message {
   id: string;
@@ -163,12 +164,7 @@ export function ChatView() {
               style={{ width: 5, height: 5, background: "#6366f1", top: 0, right: 0 }}
             />
           </button>
-          <div
-            className="flex items-center justify-center rounded-full cursor-pointer"
-            style={{ width: 28, height: 28, background: "linear-gradient(135deg,#6366f1,#a78bfa)" }}
-          >
-            <span className="text-white font-bold" style={{ fontSize: 10 }}>JD</span>
-          </div>
+          <UserAvatar />
         </div>
 
         {/* Chat feed */}

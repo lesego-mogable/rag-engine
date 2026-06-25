@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
+import { useSession, signOut } from "next-auth/react";
 
 const navItems = [
   {
@@ -59,8 +60,13 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+
+  const userName = session?.user?.name ?? "—";
+  const userRole = session?.user?.role ?? "viewer";
+  const userInitials = userName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 
   useEffect(() => {
     if (!showUserMenu) return;
@@ -221,7 +227,7 @@ export function Sidebar() {
             <button
               className="flex items-center gap-2 px-3 py-[9px] text-[12.5px] font-medium transition-colors w-full text-left"
               style={{ color: "rgba(255,255,255,.75)" }}
-              onClick={() => setShowUserMenu(false)}
+              onClick={() => signOut({ callbackUrl: "/login" })}
               onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,.07)")}
               onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
             >
@@ -244,11 +250,11 @@ export function Sidebar() {
             className="flex items-center justify-center rounded-full flex-shrink-0"
             style={{ width: 27, height: 27, background: "linear-gradient(135deg,#6366f1,#a78bfa)" }}
           >
-            <span className="text-white font-bold" style={{ fontSize: 10 }}>JD</span>
+            <span className="text-white font-bold" style={{ fontSize: 10 }}>{userInitials}</span>
           </div>
           <div className="flex-1 min-w-0 text-left">
-            <div className="text-[12px] font-semibold truncate" style={{ color: "#e0e7ff" }}>Jane Doe</div>
-            <div className="text-[10px] truncate" style={{ color: "rgba(255,255,255,.32)" }}>Finance Analyst</div>
+            <div className="text-[12px] font-semibold truncate" style={{ color: "#e0e7ff" }}>{userName}</div>
+            <div className="text-[10px] truncate" style={{ color: "rgba(255,255,255,.32)" }}>{userRole}</div>
           </div>
           <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="rgba(255,255,255,.3)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M4 10l4-4 4 4" />

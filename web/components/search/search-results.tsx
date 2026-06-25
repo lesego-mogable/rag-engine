@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { UserAvatar } from "@/components/user-avatar";
 
 const ALL_FILTER_OPTIONS = ["PDF", "DOCX", "XLSX", "PPTX", "Last 7 days", "Last 30 days", "Last 90 days"];
 
@@ -43,12 +44,7 @@ export function SearchResults() {
         <span className="flex-1 text-[15px] font-bold" style={{ color: "#1e1b4b" }}>
           Search
         </span>
-        <div
-          className="flex items-center justify-center rounded-full cursor-pointer"
-          style={{ width: 28, height: 28, background: "linear-gradient(135deg,#6366f1,#a78bfa)" }}
-        >
-          <span className="text-white font-bold" style={{ fontSize: 10 }}>JD</span>
-        </div>
+        <UserAvatar />
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-[18px] scrollbar-thin space-y-[14px]">

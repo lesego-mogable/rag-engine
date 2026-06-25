@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { UserAvatar } from "@/components/user-avatar";
 
 type TabKey = "General" | "Integrations" | "Users & Roles" | "API Keys" | "Audit Log";
 
@@ -23,7 +24,7 @@ const integrationsList: Integration[] = [
   { id: "onedrive", name: "OneDrive", subtitle: "Microsoft 365", abbr: "OD", abbrColor: "#0078d4", abbrBg: "#e8f0fe", initialStatus: "connected" },
   { id: "dropbox", name: "Dropbox", subtitle: "Dropbox Business", abbr: "Db", abbrColor: "#0061ff", abbrBg: "#e8f0fe", initialStatus: "disconnected" },
   { id: "slack", name: "Slack", subtitle: "Slack Enterprise", abbr: "Sl", abbrColor: "#4a154b", abbrBg: "#f5f0ff", initialStatus: "disconnected" },
-  { id: "teams", name: "Teams", subtitle: "Microsoft 365", abbr: "Ms", abbrColor: "#6264a7", abbrBg: "#eef1ff", initialStatus: "connecting" },
+  { id: "teams", name: "Teams", subtitle: "Microsoft 365", abbr: "Ms", abbrColor: "#6264a7", abbrBg: "#eef1ff", initialStatus: "disconnected" },
   { id: "jira", name: "Jira", subtitle: "Atlassian", abbr: "Ji", abbrColor: "#0052cc", abbrBg: "#e8f0fe", initialStatus: "disconnected" },
 ];
 
@@ -136,12 +137,7 @@ export function SettingsView() {
         <span className="flex-1 text-[15px] font-bold" style={{ color: "#1e1b4b" }}>
           Settings
         </span>
-        <div
-          className="flex items-center justify-center rounded-full cursor-pointer"
-          style={{ width: 28, height: 28, background: "linear-gradient(135deg,#6366f1,#a78bfa)" }}
-        >
-          <span className="text-white font-bold" style={{ fontSize: 10 }}>JD</span>
-        </div>
+        <UserAvatar />
       </div>
 
       {/* Tabs */}
@@ -269,10 +265,10 @@ export function SettingsView() {
             <div className="grid grid-cols-4 gap-[10px]">
               {integrationsList.map((intg) => {
                 const isConnected = integrationConnected[intg.id];
-                const status = isConnected ? "connected" : (intg.initialStatus === "connecting" ? "connecting" : "disconnected");
+                const status = isConnected ? "connected" : "disconnected";
                 const st = statusStyle[status];
-                const detail = isConnected ? "Connected · 0 files synced" : (status === "connecting" ? "Connecting…" : "Not connected");
-                const toggleBg = isConnected ? "#6366f1" : status === "connecting" ? "#fef3c7" : "#e5e7f2";
+                const detail = isConnected ? "Connected · 0 files synced" : "Not connected";
+                const toggleBg = isConnected ? "#6366f1" : "#e5e7f2";
                 const thumbRight = isConnected;
 
                 return (

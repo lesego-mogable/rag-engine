@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { UserAvatar } from "@/components/user-avatar";
 
 interface PendingFile {
   name: string;
@@ -123,12 +124,7 @@ export function DocumentLibrary() {
           </svg>
           Upload Files
         </button>
-        <div
-          className="flex items-center justify-center rounded-full cursor-pointer"
-          style={{ width: 28, height: 28, background: "linear-gradient(135deg,#6366f1,#a78bfa)" }}
-        >
-          <span className="text-white font-bold" style={{ fontSize: 10 }}>JD</span>
-        </div>
+        <UserAvatar />
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-4 scrollbar-thin space-y-4">

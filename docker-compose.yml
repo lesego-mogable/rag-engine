@@ -1,38 +1,38 @@
 # docker-compose.yml
 services:
-  # The Primary Database (Postgres)
+  # Lumina RAG — PostgreSQL Database
   db:
     image: postgres:17-alpine
-    container_name: agency-postgres-db
+    container_name: lumina-db
     restart: always
     environment:
-      POSTGRES_USER: agency_dev
-      POSTGRES_PASSWORD: agency_password
-      POSTGRES_DB: client_project_db
+      POSTGRES_USER: lumina_dev
+      POSTGRES_PASSWORD: lumina_password
+      POSTGRES_DB: lumina_db
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - lumina_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agency_dev -d client_project_db"]
+      test: ["CMD-SHELL", "pg_isready -U lumina_dev -d lumina_db"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # Redis Cache
+  # Lumina RAG — Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: agency-redis-cache
+    container_name: lumina-redis
     restart: always
     ports:
-      - "6379:6379"
+      - "6380:6379"
 
-  # Enterprise RAG AI Engine (Python / FastAPI)
+  # Lumina RAG — AI Engine (Python / FastAPI)
   ai-engine:
     build:
       context: ./ai-engine
       dockerfile: Dockerfile
-    container_name: agency-ai-engine
+    container_name: lumina-ai-engine
     restart: always
     env_file:
       - ./ai-engine/.env
@@ -42,7 +42,7 @@ services:
       db:
         condition: service_healthy
 
-  # Lumina Web Frontend (Next.js)
+  # Lumina RAG — Web Frontend (Next.js)
   web:
     build:
       context: ./web
@@ -51,24 +51,28 @@ services:
     restart: always
     environment:
       NEXT_PUBLIC_AI_ENGINE_URL: http://ai-engine:8000
+      DATABASE_URL: postgresql://lumina_dev:lumina_password@db:5432/lumina_db
     ports:
       - "3000:3000"
     depends_on:
-      - ai-engine
+      db:
+        condition: service_healthy
+      ai-engine:
+        condition: service_started
 
-  # The Visual Database Manager (pgAdmin)
+  # Lumina RAG — pgAdmin
   pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: agency-pgadmin-ui
+    container_name: lumina-pgadmin
     restart: always
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@agency.com
+      PGADMIN_DEFAULT_EMAIL: admin@lumina.dev
       PGADMIN_DEFAULT_PASSWORD: admin_password
     ports:
-      - "5050:80"
+      - "5051:80"
     depends_on:
       db:
         condition: service_healthy
 
 volumes:
-  db_data:
+  lumina_db_data:

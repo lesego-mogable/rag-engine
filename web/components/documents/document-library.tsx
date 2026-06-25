@@ -1,13 +1,34 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { UserAvatar } from "@/components/user-avatar";
 
-interface PendingFile {
+interface Document {
+  id: string;
   name: string;
-  size: string;
+  size: number;
   type: string;
+  blobName: string;
+  status: "queued" | "processing" | "indexed" | "failed";
+  chunkCount: number | null;
+  errorMsg: string | null;
+  createdAt: string;
+}
+
+interface Stats {
+  total: number;
+  indexed: number;
+  processing: number;
+  failed: number;
+}
+
+interface UploadingFile {
+  tempId: string;
+  name: string;
+  size: number;
+  type: string;
+  progress: number;
 }
 
 const typeStyles: Record<string, { bg: string; color: string }> = {
@@ -15,6 +36,14 @@ const typeStyles: Record<string, { bg: string; color: string }> = {
   DOCX: { bg: "#dbeafe", color: "#2563eb" },
   XLSX: { bg: "#d1fae5", color: "#059669" },
   PPTX: { bg: "#fef3c7", color: "#d97706" },
+};
+
+const statusConfig = {
+  queued: { label: "Queued", dot: "#f59e0b", bg: "#fef3c7", color: "#d97706" },
+  processing: { label: "Processing", dot: "#3b82f6", bg: "#dbeafe", color: "#2563eb" },
+  indexed: { label: "Indexed", dot: "#10b981", bg: "#d1fae5", color: "#059669" },
+  failed: { label: "Failed", dot: "#ef4444", bg: "#fee2e2", color: "#ef4444" },
+  uploading: { label: "Uploading…", dot: "#6366f1", bg: "#eef1ff", color: "#6366f1" },
 };
 
 function getFileType(name: string): string {
@@ -28,47 +57,118 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const stats = [
-  { label: "Total Docs", value: "0", iconBg: "#eef1ff", iconColor: "#6366f1", icon: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3 1h7.5L14 4.5V15H3V1z" /></svg>
-  )},
-  { label: "Indexed", value: "0", iconBg: "#d1fae5", iconColor: "#10b981", icon: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 8l4 4 8-8"/></svg>
-  )},
-  { label: "Processing", value: "0", iconBg: "#fef3c7", iconColor: "#d97706", icon: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
-  )},
-  { label: "Failed", value: "0", iconBg: "#fee2e2", iconColor: "#ef4444", icon: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
-  )},
-];
-
 export function DocumentLibrary() {
   const router = useRouter();
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [stats, setStats] = useState<Stats>({ total: 0, indexed: 0, processing: 0, failed: 0 });
+  const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
   const [dragOver, setDragOver] = useState(false);
-  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [toast, setToast] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(""), 3500);
+  }
+
+  const fetchDocuments = useCallback(async () => {
+    try {
+      const res = await fetch("/api/documents");
+      if (!res.ok) return;
+      const data = await res.json();
+      setDocuments(data.documents);
+      setStats(data.stats);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    fetchDocuments();
+  }, [fetchDocuments]);
+
+  useEffect(() => {
+    const hasActive = documents.some(
+      (d) => d.status === "queued" || d.status === "processing"
+    ) || uploadingFiles.length > 0;
+
+    if (hasActive) {
+      if (!pollRef.current) {
+        pollRef.current = setInterval(fetchDocuments, 3000);
+      }
+    } else {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    }
+
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [documents, uploadingFiles, fetchDocuments]);
+
+  async function uploadFile(file: File) {
+    const tempId = `tmp-${Date.now()}-${Math.random()}`;
+    const fileType = getFileType(file.name);
+
+    setUploadingFiles((prev) => [
+      ...prev,
+      { tempId, name: file.name, size: file.size, type: fileType, progress: 0 },
+    ]);
+
+    try {
+      const sasRes = await fetch(
+        `/api/documents/sas-token?filename=${encodeURIComponent(file.name)}`
+      );
+      if (!sasRes.ok) throw new Error("Failed to get upload URL");
+      const { sas_url, blob_name } = await sasRes.json();
+
+      const uploadRes = await fetch(sas_url, {
+        method: "PUT",
+        headers: {
+          "x-ms-blob-type": "BlockBlob",
+          "Content-Type": file.type || "application/octet-stream",
+        },
+        body: file,
+      });
+      if (!uploadRes.ok) throw new Error("Upload to storage failed");
+
+      const metaRes = await fetch("/api/documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: file.name,
+          size: file.size,
+          type: fileType,
+          blobName: blob_name,
+        }),
+      });
+      if (!metaRes.ok) throw new Error("Failed to register document");
+
+      await fetchDocuments();
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploadingFiles((prev) => prev.filter((f) => f.tempId !== tempId));
+    }
+  }
 
   function addFiles(fileList: FileList) {
-    const newFiles: PendingFile[] = Array.from(fileList).map((f) => ({
-      name: f.name,
-      size: formatBytes(f.size),
-      type: getFileType(f.name),
-    }));
-    setPendingFiles((prev) => [...prev, ...newFiles]);
+    Array.from(fileList).forEach((f) => uploadFile(f));
   }
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragOver(false);
-    if (e.dataTransfer.files.length) {
-      addFiles(e.dataTransfer.files);
-    }
+    if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
   }
 
   function handleFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
-    if (e.target.files && e.target.files.length) {
+    if (e.target.files?.length) {
       addFiles(e.target.files);
       e.target.value = "";
     }
@@ -78,9 +178,93 @@ export function DocumentLibrary() {
     fileInputRef.current?.click();
   }
 
+  async function deleteDocument(id: string) {
+    try {
+      await fetch(`/api/documents/${id}`, { method: "DELETE" });
+      await fetchDocuments();
+    } catch {
+      showToast("Failed to delete document");
+    }
+    setOpenMenuId(null);
+  }
+
+  const statCards = [
+    {
+      label: "Total Docs",
+      value: String(stats.total),
+      iconBg: "#eef1ff",
+      iconColor: "#6366f1",
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M3 1h7.5L14 4.5V15H3V1z" />
+        </svg>
+      ),
+    },
+    {
+      label: "Indexed",
+      value: String(stats.indexed),
+      iconBg: "#d1fae5",
+      iconColor: "#10b981",
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M2 8l4 4 8-8" />
+        </svg>
+      ),
+    },
+    {
+      label: "Processing",
+      value: String(stats.processing),
+      iconBg: "#fef3c7",
+      iconColor: "#d97706",
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+          <circle cx="8" cy="8" r="6" />
+          <path d="M8 5v3l2 2" />
+        </svg>
+      ),
+    },
+    {
+      label: "Failed",
+      value: String(stats.failed),
+      iconBg: "#fee2e2",
+      iconColor: "#ef4444",
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+          <line x1="4" y1="4" x2="12" y2="12" />
+          <line x1="12" y1="4" x2="4" y2="12" />
+        </svg>
+      ),
+    },
+  ];
+
+  const allItems = [
+    ...uploadingFiles.map((f) => ({ kind: "uploading" as const, data: f })),
+    ...documents.map((d) => ({ kind: "document" as const, data: d })),
+  ];
+
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      {/* Hidden file input */}
+      {toast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "#1e1b4b",
+            color: "#fff",
+            fontSize: 12,
+            fontWeight: 600,
+            borderRadius: 8,
+            padding: "8px 16px",
+            zIndex: 9999,
+            boxShadow: "0 4px 16px rgba(0,0,0,.18)",
+          }}
+        >
+          {toast}
+        </div>
+      )}
+
       <input
         ref={fileInputRef}
         type="file"
@@ -130,7 +314,7 @@ export function DocumentLibrary() {
       <div className="flex-1 overflow-y-auto px-5 py-4 scrollbar-thin space-y-4">
         {/* Stats row */}
         <div className="grid grid-cols-4 gap-3">
-          {stats.map((stat) => (
+          {statCards.map((stat) => (
             <div
               key={stat.label}
               className="rounded-[8px] px-4 py-3 flex items-center gap-3"
@@ -193,7 +377,7 @@ export function DocumentLibrary() {
         </div>
 
         {/* Document grid or empty state */}
-        {pendingFiles.length === 0 ? (
+        {allItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <div
               className="flex items-center justify-center rounded-full"
@@ -206,17 +390,59 @@ export function DocumentLibrary() {
             </div>
             <div className="text-center">
               <p className="text-[14px] font-bold" style={{ color: "#1e1b4b" }}>No documents yet</p>
-              <p className="text-[12.5px] mt-1" style={{ color: "#94a3b8" }}>Upload your first document to get started</p>
+              <p className="text-[12.5px] mt-1" style={{ color: "#94a3b8" }}>
+                Upload your first document to get started
+              </p>
             </div>
           </div>
         ) : (
           <div className="grid grid-cols-4 gap-3">
-            {pendingFiles.map((doc, idx) => {
-              const type = typeStyles[doc.type] ?? { bg: "#f0f3fc", color: "#64748b" };
-              const menuKey = `${doc.name}-${idx}`;
+            {allItems.map((item) => {
+              if (item.kind === "uploading") {
+                const f = item.data;
+                const typeStyle = typeStyles[f.type] ?? { bg: "#f0f3fc", color: "#64748b" };
+                const sc = statusConfig.uploading;
+                return (
+                  <div
+                    key={f.tempId}
+                    className="rounded-[8px] p-3"
+                    style={{ background: "#fff", border: "1px solid #e5e7f2", opacity: 0.8 }}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div
+                        className="flex items-center justify-center rounded-[5px] font-bold"
+                        style={{ width: 32, height: 32, background: typeStyle.bg, color: typeStyle.color, fontSize: 8 }}
+                      >
+                        {f.type}
+                      </div>
+                    </div>
+                    <div className="text-[12px] font-semibold mb-1 truncate" style={{ color: "#1e1b4b" }}>
+                      {f.name}
+                    </div>
+                    <div className="text-[11px] mb-2" style={{ color: "#94a3b8" }}>
+                      {formatBytes(f.size)}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="rounded-full" style={{ width: 6, height: 6, background: sc.dot }} />
+                      <span
+                        className="text-[10.5px] font-semibold rounded-[4px] px-[6px] py-[1px]"
+                        style={{ background: sc.bg, color: sc.color }}
+                      >
+                        {sc.label}
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              const doc = item.data;
+              const typeStyle = typeStyles[doc.type] ?? { bg: "#f0f3fc", color: "#64748b" };
+              const sc = statusConfig[doc.status] ?? statusConfig.queued;
+              const menuKey = doc.id;
+
               return (
                 <div
-                  key={menuKey}
+                  key={doc.id}
                   className="rounded-[8px] p-3 transition-all"
                   style={{ background: "#fff", border: "1px solid #e5e7f2", position: "relative" }}
                   onMouseEnter={(e) => {
@@ -231,7 +457,7 @@ export function DocumentLibrary() {
                   <div className="flex items-start justify-between mb-2">
                     <div
                       className="flex items-center justify-center rounded-[5px] font-bold"
-                      style={{ width: 32, height: 32, background: type.bg, color: type.color, fontSize: 8 }}
+                      style={{ width: 32, height: 32, background: typeStyle.bg, color: typeStyle.color, fontSize: 8 }}
                     >
                       {doc.type}
                     </div>
@@ -264,18 +490,15 @@ export function DocumentLibrary() {
                             minWidth: 130,
                           }}
                         >
-                          {["Download", "Rename", "Delete"].map((opt) => (
-                            <button
-                              key={opt}
-                              className="w-full text-left px-3 py-[7px] text-[12.5px] font-medium transition-colors"
-                              style={{ color: opt === "Delete" ? "#ef4444" : "#1e1b4b" }}
-                              onClick={() => setOpenMenuId(null)}
-                              onMouseEnter={(e) => (e.currentTarget.style.background = "#f0f3fc")}
-                              onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
-                            >
-                              {opt}
-                            </button>
-                          ))}
+                          <button
+                            className="w-full text-left px-3 py-[7px] text-[12.5px] font-medium transition-colors"
+                            style={{ color: "#ef4444" }}
+                            onClick={() => deleteDocument(doc.id)}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = "#fff0f0")}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                          >
+                            Delete
+                          </button>
                         </div>
                       )}
                     </div>
@@ -284,17 +507,23 @@ export function DocumentLibrary() {
                     {doc.name}
                   </div>
                   <div className="text-[11px] mb-2" style={{ color: "#94a3b8" }}>
-                    {doc.size}
+                    {formatBytes(doc.size)}
+                    {doc.chunkCount != null && ` · ${doc.chunkCount} chunks`}
                   </div>
                   <div className="flex items-center gap-1">
-                    <div className="rounded-full" style={{ width: 6, height: 6, background: "#f59e0b" }} />
+                    <div className="rounded-full" style={{ width: 6, height: 6, background: sc.dot }} />
                     <span
                       className="text-[10.5px] font-semibold rounded-[4px] px-[6px] py-[1px]"
-                      style={{ background: "#fef3c7", color: "#d97706" }}
+                      style={{ background: sc.bg, color: sc.color }}
                     >
-                      Queued
+                      {sc.label}
                     </span>
                   </div>
+                  {doc.errorMsg && (
+                    <div className="mt-1 text-[10px] truncate" style={{ color: "#ef4444" }} title={doc.errorMsg}>
+                      {doc.errorMsg}
+                    </div>
+                  )}
                 </div>
               );
             })}

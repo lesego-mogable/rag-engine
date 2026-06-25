@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
 
 const navItems = [
   {
@@ -56,14 +57,21 @@ const navItems = [
   },
 ];
 
-const recentChats = [
-  "Q3 Earnings Analysis",
-  "HR Policy Summary",
-  "APAC Growth Strategy",
-];
-
 export function Sidebar() {
   const pathname = usePathname();
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showUserMenu) return;
+    function handleClick(e: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [showUserMenu]);
 
   return (
     <aside
@@ -74,11 +82,7 @@ export function Sidebar() {
       <div className="flex items-center gap-2 px-[14px] pt-[15px] pb-3">
         <div
           className="flex items-center justify-center flex-shrink-0 rounded-[6px]"
-          style={{
-            width: 27,
-            height: 27,
-            background: "linear-gradient(135deg,#6366f1,#818cf8)",
-          }}
+          style={{ width: 27, height: 27, background: "linear-gradient(135deg,#6366f1,#818cf8)" }}
         >
           <svg width="12" height="12" viewBox="0 0 16 16" fill="white">
             <rect x="1" y="1" width="5.5" height="5.5" rx="1.5" />
@@ -108,12 +112,8 @@ export function Sidebar() {
             background: "rgba(99,102,241,.15)",
             color: "#a5b4fc",
           }}
-          onMouseEnter={(e) =>
-            (e.currentTarget.style.background = "rgba(99,102,241,.25)")
-          }
-          onMouseLeave={(e) =>
-            (e.currentTarget.style.background = "rgba(99,102,241,.15)")
-          }
+          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(99,102,241,.25)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(99,102,241,.15)")}
         >
           <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
             <line x1="8" y1="2" x2="8" y2="14" />
@@ -171,26 +171,12 @@ export function Sidebar() {
             >
               Recent
             </div>
-            {recentChats.map((chat) => (
-              <button
-                key={chat}
-                className="flex items-center gap-2 rounded-[5px] px-[9px] py-[5px] text-left w-full transition-colors truncate"
-                style={{ fontSize: "11.5px", color: "rgba(255,255,255,.38)", fontWeight: 400 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = "rgba(255,255,255,.05)";
-                  e.currentTarget.style.color = "rgba(255,255,255,.65)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "transparent";
-                  e.currentTarget.style.color = "rgba(255,255,255,.38)";
-                }}
-              >
-                <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" style={{ flexShrink: 0, opacity: 0.6 }}>
-                  <path d="M2 2h12a1 1 0 011 1v8a1 1 0 01-1 1H5L2 14V3a1 1 0 011-1z" />
-                </svg>
-                <span className="truncate">{chat}</span>
-              </button>
-            ))}
+            <div
+              className="px-[9px] py-[5px] text-left"
+              style={{ fontSize: "11.5px", color: "rgba(255,255,255,.28)", fontWeight: 400 }}
+            >
+              No recent chats
+            </div>
           </>
         )}
       </nav>
@@ -198,35 +184,75 @@ export function Sidebar() {
       {/* User footer */}
       <div
         className="px-[10px] py-[9px]"
-        style={{ borderTop: "1px solid rgba(255,255,255,.07)" }}
+        style={{ borderTop: "1px solid rgba(255,255,255,.07)", position: "relative" }}
+        ref={userMenuRef}
       >
+        {/* User menu popup */}
+        {showUserMenu && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: "calc(100% + 4px)",
+              left: 10,
+              right: 10,
+              background: "#1e1b4b",
+              border: "1px solid rgba(255,255,255,.1)",
+              borderRadius: 8,
+              boxShadow: "0 -4px 16px rgba(0,0,0,.3)",
+              zIndex: 20,
+              overflow: "hidden",
+            }}
+          >
+            <Link
+              href="/settings"
+              className="flex items-center gap-2 px-3 py-[9px] text-[12.5px] font-medium transition-colors w-full"
+              style={{ color: "rgba(255,255,255,.75)" }}
+              onClick={() => setShowUserMenu(false)}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,.07)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <circle cx="8" cy="8" r="2.4" />
+                <path d="M8 1.5v1M8 13.5v1M1.5 8h1M13.5 8h1M3.4 3.4l.7.7M11.9 11.9l.7.7M3.4 12.6l.7-.7M11.9 4.1l.7-.7" strokeLinecap="round" />
+              </svg>
+              Account Settings
+            </Link>
+            <div style={{ height: 1, background: "rgba(255,255,255,.07)" }} />
+            <button
+              className="flex items-center gap-2 px-3 py-[9px] text-[12.5px] font-medium transition-colors w-full text-left"
+              style={{ color: "rgba(255,255,255,.75)" }}
+              onClick={() => setShowUserMenu(false)}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,.07)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 2h3a1 1 0 011 1v10a1 1 0 01-1 1h-3" />
+                <path d="M7 11l4-3-4-3v6z" />
+              </svg>
+              Sign Out
+            </button>
+          </div>
+        )}
+
         <button
           className="flex items-center gap-2 rounded-[5px] px-2 py-[6px] w-full transition-colors"
-          onMouseEnter={(e) =>
-            (e.currentTarget.style.background = "rgba(255,255,255,.06)")
-          }
-          onMouseLeave={(e) =>
-            (e.currentTarget.style.background = "transparent")
-          }
+          onClick={() => setShowUserMenu((v) => !v)}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,.06)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
         >
           <div
             className="flex items-center justify-center rounded-full flex-shrink-0"
-            style={{
-              width: 27,
-              height: 27,
-              background: "linear-gradient(135deg,#6366f1,#a78bfa)",
-            }}
+            style={{ width: 27, height: 27, background: "linear-gradient(135deg,#6366f1,#a78bfa)" }}
           >
             <span className="text-white font-bold" style={{ fontSize: 10 }}>JD</span>
           </div>
           <div className="flex-1 min-w-0 text-left">
-            <div className="text-[12px] font-semibold truncate" style={{ color: "#e0e7ff" }}>
-              Jane Doe
-            </div>
-            <div className="text-[10px] truncate" style={{ color: "rgba(255,255,255,.32)" }}>
-              Finance Analyst
-            </div>
+            <div className="text-[12px] font-semibold truncate" style={{ color: "#e0e7ff" }}>Jane Doe</div>
+            <div className="text-[10px] truncate" style={{ color: "rgba(255,255,255,.32)" }}>Finance Analyst</div>
           </div>
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="rgba(255,255,255,.3)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 10l4-4 4 4" />
+          </svg>
         </button>
       </div>
     </aside>

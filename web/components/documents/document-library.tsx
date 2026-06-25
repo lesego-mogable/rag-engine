@@ -1,24 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 
-const stats = [
-  { label: "Total Docs", value: "1,240", icon: "📄", iconBg: "#eef1ff", iconColor: "#6366f1" },
-  { label: "Indexed", value: "1,186", icon: "✓", iconBg: "#d1fae5", iconColor: "#10b981" },
-  { label: "Processing", value: "42", icon: "⏳", iconBg: "#fef3c7", iconColor: "#d97706" },
-  { label: "Failed", value: "12", icon: "✕", iconBg: "#fee2e2", iconColor: "#ef4444" },
-];
-
-const documents = [
-  { name: "Q3_Earnings_2024.pdf", type: "PDF", size: "2.4 MB", date: "Oct 3, 2024", status: "Indexed" },
-  { name: "HR_Policy_Manual_v2.docx", type: "DOCX", size: "1.1 MB", date: "Sep 18, 2024", status: "Indexed" },
-  { name: "Annual_Report_2024.pdf", type: "PDF", size: "8.7 MB", date: "Jan 15, 2024", status: "Indexed" },
-  { name: "Product_Roadmap_Q4.pptx", type: "PPTX", size: "4.2 MB", date: "Oct 10, 2024", status: "Processing" },
-  { name: "APAC_Strategy_2025.pdf", type: "PDF", size: "3.1 MB", date: "Oct 12, 2024", status: "Indexed" },
-  { name: "Financial_Model_FY24.xlsx", type: "XLSX", size: "5.6 MB", date: "Sep 30, 2024", status: "Indexed" },
-  { name: "Board_Minutes_Sep24.pdf", type: "PDF", size: "0.9 MB", date: "Oct 1, 2024", status: "Failed" },
-  { name: "IT_Security_Policy.docx", type: "DOCX", size: "0.7 MB", date: "Aug 22, 2024", status: "Indexed" },
-];
+interface PendingFile {
+  name: string;
+  size: string;
+  type: string;
+}
 
 const typeStyles: Record<string, { bg: string; color: string }> = {
   PDF: { bg: "#fee2e2", color: "#ef4444" },
@@ -27,17 +16,79 @@ const typeStyles: Record<string, { bg: string; color: string }> = {
   PPTX: { bg: "#fef3c7", color: "#d97706" },
 };
 
-const statusStyles: Record<string, { bg: string; color: string; dot: string }> = {
-  Indexed: { bg: "#d1fae5", color: "#059669", dot: "#10b981" },
-  Processing: { bg: "#fef3c7", color: "#d97706", dot: "#f59e0b" },
-  Failed: { bg: "#fee2e2", color: "#dc2626", dot: "#ef4444" },
-};
+function getFileType(name: string): string {
+  const ext = name.split(".").pop()?.toUpperCase() ?? "FILE";
+  return ext in typeStyles ? ext : "FILE";
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const stats = [
+  { label: "Total Docs", value: "0", iconBg: "#eef1ff", iconColor: "#6366f1", icon: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3 1h7.5L14 4.5V15H3V1z" /></svg>
+  )},
+  { label: "Indexed", value: "0", iconBg: "#d1fae5", iconColor: "#10b981", icon: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 8l4 4 8-8"/></svg>
+  )},
+  { label: "Processing", value: "0", iconBg: "#fef3c7", iconColor: "#d97706", icon: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
+  )},
+  { label: "Failed", value: "0", iconBg: "#fee2e2", iconColor: "#ef4444", icon: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
+  )},
+];
 
 export function DocumentLibrary() {
+  const router = useRouter();
   const [dragOver, setDragOver] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function addFiles(fileList: FileList) {
+    const newFiles: PendingFile[] = Array.from(fileList).map((f) => ({
+      name: f.name,
+      size: formatBytes(f.size),
+      type: getFileType(f.name),
+    }));
+    setPendingFiles((prev) => [...prev, ...newFiles]);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files.length) {
+      addFiles(e.dataTransfer.files);
+    }
+  }
+
+  function handleFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (e.target.files && e.target.files.length) {
+      addFiles(e.target.files);
+      e.target.value = "";
+    }
+  }
+
+  function triggerFileInput() {
+    fileInputRef.current?.click();
+  }
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".pdf,.docx,.xlsx,.pptx"
+        style={{ display: "none" }}
+        onChange={handleFileInputChange}
+      />
+
       {/* Topbar */}
       <div
         className="flex items-center gap-2 px-[18px] flex-shrink-0"
@@ -48,7 +99,8 @@ export function DocumentLibrary() {
         </span>
         <button
           className="flex items-center gap-[5px] rounded-[6px] px-[10px] py-[5px] text-[12px] font-medium transition-colors"
-          style={{ border: "1px solid #e5e7f2", color: "#6b7280" }}
+          style={{ border: "1px solid #e5e7f2", color: "#6b7280", background: "#fff" }}
+          onClick={() => router.push("/search")}
           onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f6fb")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
         >
@@ -61,6 +113,7 @@ export function DocumentLibrary() {
         <button
           className="flex items-center gap-[5px] rounded-[6px] px-[10px] py-[5px] text-[12px] font-semibold text-white transition-colors"
           style={{ background: "#6366f1" }}
+          onClick={triggerFileInput}
           onMouseEnter={(e) => (e.currentTarget.style.background = "#4f46e5")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "#6366f1")}
         >
@@ -88,7 +141,7 @@ export function DocumentLibrary() {
               style={{ background: "#fff", border: "1px solid #e5e7f2" }}
             >
               <div
-                className="flex items-center justify-center rounded-[7px] text-[13px] font-bold flex-shrink-0"
+                className="flex items-center justify-center rounded-[7px] flex-shrink-0"
                 style={{ width: 34, height: 34, background: stat.iconBg, color: stat.iconColor }}
               >
                 {stat.icon}
@@ -114,7 +167,8 @@ export function DocumentLibrary() {
           }}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => { e.preventDefault(); setDragOver(false); }}
+          onDrop={handleDrop}
+          onClick={triggerFileInput}
         >
           <div
             className="flex items-center justify-center rounded-full"
@@ -128,7 +182,11 @@ export function DocumentLibrary() {
           <div className="text-center">
             <p className="text-[13px] font-semibold" style={{ color: "#1e1b4b" }}>
               Drop files here or{" "}
-              <span className="cursor-pointer" style={{ color: "#6366f1" }}>
+              <span
+                className="cursor-pointer"
+                style={{ color: "#6366f1" }}
+                onClick={(e) => { e.stopPropagation(); triggerFileInput(); }}
+              >
                 browse
               </span>
             </p>
@@ -138,71 +196,114 @@ export function DocumentLibrary() {
           </div>
         </div>
 
-        {/* Document grid */}
-        <div className="grid grid-cols-4 gap-3">
-          {documents.map((doc) => {
-            const type = typeStyles[doc.type] ?? typeStyles.PDF;
-            const status = statusStyles[doc.status] ?? statusStyles.Indexed;
-            return (
-              <div
-                key={doc.name}
-                className="rounded-[8px] p-3 cursor-pointer transition-all"
-                style={{ background: "#fff", border: "1px solid #e5e7f2" }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "#c7d2f6";
-                  e.currentTarget.style.boxShadow = "0 2px 8px rgba(99,102,241,.06)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "#e5e7f2";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div
-                    className="flex items-center justify-center rounded-[5px] font-bold"
-                    style={{ width: 32, height: 32, background: type.bg, color: type.color, fontSize: 8 }}
-                  >
-                    {doc.type}
-                  </div>
-                  <button
-                    className="flex items-center justify-center rounded-[4px] transition-colors"
-                    style={{ width: 24, height: 24, color: "#94a3b8" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "#6366f1")}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = "#94a3b8")}
-                    aria-label="More options"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                      <circle cx="8" cy="3" r="1.2" />
-                      <circle cx="8" cy="8" r="1.2" />
-                      <circle cx="8" cy="13" r="1.2" />
-                    </svg>
-                  </button>
-                </div>
+        {/* Document grid or empty state */}
+        {pendingFiles.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <div
+              className="flex items-center justify-center rounded-full"
+              style={{ width: 52, height: 52, background: "#eef1ff" }}
+            >
+              <svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="#6366f1" strokeWidth="1.5">
+                <path d="M8 3v10M4 7l4-4 4 4" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M2 13h12" strokeLinecap="round" />
+              </svg>
+            </div>
+            <div className="text-center">
+              <p className="text-[14px] font-bold" style={{ color: "#1e1b4b" }}>No documents yet</p>
+              <p className="text-[12.5px] mt-1" style={{ color: "#94a3b8" }}>Upload your first document to get started</p>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-4 gap-3">
+            {pendingFiles.map((doc, idx) => {
+              const type = typeStyles[doc.type] ?? { bg: "#f0f3fc", color: "#64748b" };
+              const menuKey = `${doc.name}-${idx}`;
+              return (
                 <div
-                  className="text-[12px] font-semibold mb-1 truncate"
-                  style={{ color: "#1e1b4b" }}
+                  key={menuKey}
+                  className="rounded-[8px] p-3 transition-all"
+                  style={{ background: "#fff", border: "1px solid #e5e7f2", position: "relative" }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = "#c7d2f6";
+                    e.currentTarget.style.boxShadow = "0 2px 8px rgba(99,102,241,.06)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = "#e5e7f2";
+                    e.currentTarget.style.boxShadow = "none";
+                  }}
                 >
-                  {doc.name}
+                  <div className="flex items-start justify-between mb-2">
+                    <div
+                      className="flex items-center justify-center rounded-[5px] font-bold"
+                      style={{ width: 32, height: 32, background: type.bg, color: type.color, fontSize: 8 }}
+                    >
+                      {doc.type}
+                    </div>
+                    <div style={{ position: "relative" }}>
+                      <button
+                        className="flex items-center justify-center rounded-[4px] transition-colors"
+                        style={{ width: 24, height: 24, color: "#94a3b8" }}
+                        onClick={() => setOpenMenuId(openMenuId === menuKey ? null : menuKey)}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = "#6366f1")}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = "#94a3b8")}
+                        aria-label="More options"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                          <circle cx="8" cy="3" r="1.2" />
+                          <circle cx="8" cy="8" r="1.2" />
+                          <circle cx="8" cy="13" r="1.2" />
+                        </svg>
+                      </button>
+                      {openMenuId === menuKey && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: 28,
+                            right: 0,
+                            background: "#fff",
+                            border: "1px solid #e5e7f2",
+                            borderRadius: 8,
+                            boxShadow: "0 4px 16px rgba(0,0,0,.10)",
+                            zIndex: 10,
+                            minWidth: 130,
+                          }}
+                        >
+                          {["Download", "Rename", "Delete"].map((opt) => (
+                            <button
+                              key={opt}
+                              className="w-full text-left px-3 py-[7px] text-[12.5px] font-medium transition-colors"
+                              style={{ color: opt === "Delete" ? "#ef4444" : "#1e1b4b" }}
+                              onClick={() => setOpenMenuId(null)}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = "#f0f3fc")}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                            >
+                              {opt}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-[12px] font-semibold mb-1 truncate" style={{ color: "#1e1b4b" }}>
+                    {doc.name}
+                  </div>
+                  <div className="text-[11px] mb-2" style={{ color: "#94a3b8" }}>
+                    {doc.size}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="rounded-full" style={{ width: 6, height: 6, background: "#f59e0b" }} />
+                    <span
+                      className="text-[10.5px] font-semibold rounded-[4px] px-[6px] py-[1px]"
+                      style={{ background: "#fef3c7", color: "#d97706" }}
+                    >
+                      Queued
+                    </span>
+                  </div>
                 </div>
-                <div className="text-[11px] mb-2" style={{ color: "#94a3b8" }}>
-                  {doc.size} · {doc.date}
-                </div>
-                <div className="flex items-center gap-1">
-                  <div
-                    className="rounded-full"
-                    style={{ width: 6, height: 6, background: status.dot }}
-                  />
-                  <span
-                    className="text-[10.5px] font-semibold rounded-[4px] px-[6px] py-[1px]"
-                    style={{ background: status.bg, color: status.color }}
-                  >
-                    {doc.status}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

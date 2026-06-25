@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 interface Source {
   id: number;
   filename: string;
@@ -13,6 +15,20 @@ interface SourcesPanelProps {
 }
 
 export function SourcesPanel({ sources, onClose }: SourcesPanelProps) {
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+
+  function toggleExpand(id: number) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
   return (
     <aside
       className="flex flex-col flex-shrink-0 overflow-hidden"
@@ -28,12 +44,7 @@ export function SourcesPanel({ sources, onClose }: SourcesPanelProps) {
         </span>
         <span
           className="flex items-center justify-center rounded-full text-[10px] font-bold"
-          style={{
-            width: 18,
-            height: 18,
-            background: "#6366f1",
-            color: "#fff",
-          }}
+          style={{ width: 18, height: 18, background: "#6366f1", color: "#fff" }}
         >
           {sources.length}
         </span>
@@ -60,62 +71,75 @@ export function SourcesPanel({ sources, onClose }: SourcesPanelProps) {
 
       {/* Source cards */}
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3 scrollbar-thin">
-        {sources.map((source) => (
-          <div
-            key={source.id}
-            className="rounded-[8px] p-3 cursor-pointer transition-all"
-            style={{ border: "1px solid #e5e7f2", background: "#fff" }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = "#c7d2f6";
-              e.currentTarget.style.boxShadow = "0 2px 8px rgba(99,102,241,.06)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = "#e5e7f2";
-              e.currentTarget.style.boxShadow = "none";
-            }}
-          >
-            <div className="flex items-start gap-2 mb-2">
-              <span
-                className="flex items-center justify-center rounded-full font-bold flex-shrink-0"
-                style={{
-                  width: 18,
-                  height: 18,
-                  fontSize: 9,
-                  background: "#6366f1",
-                  color: "#fff",
-                  marginTop: 1,
+        {sources.length === 0 ? (
+          <div className="flex items-center justify-center h-full">
+            <span className="text-[12.5px]" style={{ color: "#94a3b8" }}>No sources for this message</span>
+          </div>
+        ) : (
+          sources.map((source) => {
+            const isExpanded = expandedIds.has(source.id);
+            return (
+              <div
+                key={source.id}
+                className="rounded-[8px] p-3 cursor-pointer transition-all"
+                style={{ border: "1px solid #e5e7f2", background: "#fff" }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = "#c7d2f6";
+                  e.currentTarget.style.boxShadow = "0 2px 8px rgba(99,102,241,.06)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "#e5e7f2";
+                  e.currentTarget.style.boxShadow = "none";
                 }}
               >
-                {source.id}
-              </span>
-              <div className="flex-1 min-w-0">
-                <div
-                  className="text-[12px] font-semibold truncate"
-                  style={{ color: "#1e1b4b" }}
+                <div className="flex items-start gap-2 mb-2">
+                  <span
+                    className="flex items-center justify-center rounded-full font-bold flex-shrink-0"
+                    style={{
+                      width: 18,
+                      height: 18,
+                      fontSize: 9,
+                      background: "#6366f1",
+                      color: "#fff",
+                      marginTop: 1,
+                    }}
+                  >
+                    {source.id}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] font-semibold truncate" style={{ color: "#1e1b4b" }}>
+                      {source.filename}
+                    </div>
+                    <div className="text-[11px] mt-[2px]" style={{ color: "#94a3b8" }}>
+                      {source.pages}
+                    </div>
+                  </div>
+                </div>
+                <p
+                  className="text-[11.5px] leading-[1.6]"
+                  style={{
+                    color: "#4b5563",
+                    display: "-webkit-box",
+                    WebkitLineClamp: isExpanded ? undefined : 3,
+                    WebkitBoxOrient: "vertical" as const,
+                    overflow: isExpanded ? "visible" : "hidden",
+                  }}
                 >
-                  {source.filename}
-                </div>
-                <div className="text-[11px] mt-[2px]" style={{ color: "#94a3b8" }}>
-                  {source.pages}
-                </div>
+                  {source.excerpt}
+                </p>
+                <button
+                  className="text-[11px] font-medium mt-2 transition-colors"
+                  style={{ color: "#6366f1" }}
+                  onClick={() => toggleExpand(source.id)}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#4f46e5")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "#6366f1")}
+                >
+                  {isExpanded ? "Show less ↑" : "View all passages →"}
+                </button>
               </div>
-            </div>
-            <p
-              className="text-[11.5px] leading-[1.6] line-clamp-3"
-              style={{ color: "#4b5563" }}
-            >
-              {source.excerpt}
-            </p>
-            <button
-              className="text-[11px] font-medium mt-2 transition-colors"
-              style={{ color: "#6366f1" }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "#4f46e5")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "#6366f1")}
-            >
-              View all passages →
-            </button>
-          </div>
-        ))}
+            );
+          })
+        )}
       </div>
     </aside>
   );

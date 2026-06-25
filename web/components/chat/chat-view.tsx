@@ -1,37 +1,119 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { SourcesPanel } from "./sources-panel";
 
-const sources = [
-  {
-    id: 1,
-    filename: "Q3_Earnings_2024.pdf",
-    pages: "pp. 12–14",
-    excerpt:
-      "Total Q3 revenue of $4.74B represents a significant YoY increase of 22.3%. Cloud services contributed $1.82B (+31%), while enterprise licensing reached $2.08B.",
-  },
-  {
-    id: 2,
-    filename: "Executive_Summary_Q3.pdf",
-    pages: "pp. 3–5",
-    excerpt:
-      "The executive team noted this quarter as a turning point for operating leverage, with EBITDA margins expanding 340bps to 28.6% on disciplined cost management.",
-  },
-  {
-    id: 3,
-    filename: "Annual_Report_2024.pdf",
-    pages: "p. 48",
-    excerpt:
-      "Historical revenue breakdown demonstrates consistent growth across all segments, with cloud services now representing 38% of total revenue.",
-  },
+interface Message {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  pending?: boolean;
+}
+
+const EXAMPLE_PROMPTS = [
+  "Summarise Q3 earnings",
+  "What is our vacation policy?",
+  "APAC expansion milestones",
 ];
 
 export function ChatView() {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState("");
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [shareToast, setShareToast] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const feedEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    feedEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  function sendMessage(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const userId = crypto.randomUUID();
+    const assistantId = crypto.randomUUID();
+    setMessages((prev) => [
+      ...prev,
+      { id: userId, role: "user", content: trimmed },
+      { id: assistantId, role: "assistant", content: "", pending: true },
+    ]);
+    setInput("");
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage(input);
+    }
+  }
+
+  function handleNewChat() {
+    setMessages([]);
+    setInput("");
+    setSourcesOpen(false);
+  }
+
+  function handleCopy(msg: Message) {
+    navigator.clipboard.writeText(msg.content).then(() => {
+      setCopiedId(msg.id);
+      setTimeout(() => setCopiedId(null), 2000);
+    });
+  }
+
+  function handleRegenerate() {
+    setMessages((prev) => {
+      const withoutLast = [...prev];
+      while (withoutLast.length && withoutLast[withoutLast.length - 1].role === "assistant") {
+        withoutLast.pop();
+      }
+      const newId = crypto.randomUUID();
+      return [...withoutLast, { id: newId, role: "assistant", content: "", pending: true }];
+    });
+  }
+
+  function handleShare() {
+    navigator.clipboard.writeText(window.location.href).then(() => {
+      setShareToast(true);
+      setTimeout(() => setShareToast(false), 2000);
+    });
+  }
+
+  function handleAttach() {
+    fileInputRef.current?.click();
+  }
+
+  const hasMessages = messages.length > 0;
 
   return (
-    <div className="flex flex-1 overflow-hidden">
+    <div className="flex flex-1 overflow-hidden" style={{ position: "relative" }}>
+      {/* Toast */}
+      {shareToast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "#1e1b4b",
+            color: "#fff",
+            fontSize: 12,
+            fontWeight: 600,
+            borderRadius: 8,
+            padding: "8px 16px",
+            zIndex: 9999,
+            boxShadow: "0 4px 16px rgba(0,0,0,.18)",
+          }}
+        >
+          Link copied!
+        </div>
+      )}
+
+      {/* Hidden file input */}
+      <input ref={fileInputRef} type="file" multiple style={{ display: "none" }} />
+
       {/* Main chat area */}
       <div className="flex flex-col flex-1 overflow-hidden">
         {/* Topbar */}
@@ -44,13 +126,14 @@ export function ChatView() {
           }}
         >
           <span className="flex-1 text-[15px] font-bold" style={{ color: "#1e1b4b" }}>
-            Q3 Revenue Analysis
+            {hasMessages ? "Chat" : "New Chat"}
           </span>
           <button
             className="flex items-center gap-[5px] rounded-[6px] px-[10px] py-[5px] text-[12px] font-medium transition-colors"
-            style={{ border: "1px solid #e5e7f2", color: "#6b7280" }}
+            style={{ border: "1px solid #e5e7f2", color: "#6b7280", background: showHistory ? "#f5f6fb" : "#fff" }}
+            onClick={() => setShowHistory((v) => !v)}
             onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f6fb")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = showHistory ? "#f5f6fb" : "#fff")}
           >
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M8 3v10M3 8l5-5 5 5" strokeLinecap="round" strokeLinejoin="round" />
@@ -60,6 +143,7 @@ export function ChatView() {
           <button
             className="flex items-center gap-[5px] rounded-[6px] px-[10px] py-[5px] text-[12px] font-semibold text-white transition-colors"
             style={{ background: "#6366f1" }}
+            onClick={handleNewChat}
             onMouseEnter={(e) => (e.currentTarget.style.background = "#4f46e5")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "#6366f1")}
           >
@@ -76,22 +160,12 @@ export function ChatView() {
             </svg>
             <span
               className="absolute rounded-full"
-              style={{
-                width: 5,
-                height: 5,
-                background: "#6366f1",
-                top: 0,
-                right: 0,
-              }}
+              style={{ width: 5, height: 5, background: "#6366f1", top: 0, right: 0 }}
             />
           </button>
           <div
             className="flex items-center justify-center rounded-full cursor-pointer"
-            style={{
-              width: 28,
-              height: 28,
-              background: "linear-gradient(135deg,#6366f1,#a78bfa)",
-            }}
+            style={{ width: 28, height: 28, background: "linear-gradient(135deg,#6366f1,#a78bfa)" }}
           >
             <span className="text-white font-bold" style={{ fontSize: 10 }}>JD</span>
           </div>
@@ -99,161 +173,174 @@ export function ChatView() {
 
         {/* Chat feed */}
         <div className="flex-1 overflow-y-auto px-5 py-4 scrollbar-thin" style={{ background: "#f0f3fc" }}>
-          {/* Timestamp divider */}
-          <div className="flex items-center gap-3 mb-4">
-            <div className="flex-1" style={{ height: 1, background: "#e5e7f2" }} />
-            <span className="text-[11px] font-medium" style={{ color: "#94a3b8" }}>
-              Today, 10:42 AM
-            </span>
-            <div className="flex-1" style={{ height: 1, background: "#e5e7f2" }} />
-          </div>
-
-          {/* User message */}
-          <div className="flex justify-end mb-4">
-            <div
-              className="rounded-[14px] rounded-br-[4px] px-[14px] py-[10px] max-w-[70%]"
-              style={{ background: "#6366f1" }}
-            >
-              <p className="text-white text-[13.5px] leading-[1.55]">
-                Can you give me a detailed breakdown of Q3 revenue by business segment, including YoY growth rates?
-              </p>
-            </div>
-          </div>
-
-          {/* Lumina response */}
-          <div className="mb-4 max-w-[85%]">
-            <div className="flex items-center gap-2 mb-2">
+          {!hasMessages ? (
+            /* Empty / welcome state */
+            <div className="flex flex-col items-center justify-center h-full gap-5">
               <div
-                className="flex items-center justify-center rounded-[5px] flex-shrink-0"
-                style={{
-                  width: 22,
-                  height: 22,
-                  background: "linear-gradient(135deg,#6366f1,#818cf8)",
-                }}
+                className="flex items-center justify-center rounded-[12px]"
+                style={{ width: 52, height: 52, background: "linear-gradient(135deg,#6366f1,#818cf8)" }}
               >
-                <svg width="10" height="10" viewBox="0 0 16 16" fill="white">
+                <svg width="24" height="24" viewBox="0 0 16 16" fill="white">
                   <rect x="1" y="1" width="5.5" height="5.5" rx="1.5" />
                   <rect x="9.5" y="1" width="5.5" height="5.5" rx="1.5" />
                   <rect x="1" y="9.5" width="5.5" height="5.5" rx="1.5" />
                   <rect x="9.5" y="9.5" width="5.5" height="5.5" rx="1.5" />
                 </svg>
               </div>
-              <span className="text-[12.5px] font-semibold" style={{ color: "#1e1b4b" }}>Lumina</span>
-              <span className="text-[11px]" style={{ color: "#94a3b8" }}>10:42 AM</span>
-            </div>
-            <div
-              className="rounded-[14px] rounded-tl-[4px] px-[16px] py-[13px]"
-              style={{ background: "#fff", border: "1px solid #e5e7f2" }}
-            >
-              <p className="text-[13.5px] leading-[1.65]" style={{ color: "#374151" }}>
-                Based on the Q3 2024 earnings reports
-                <SourceBadge num={1} onClick={() => setSourcesOpen(true)} />, here is the complete revenue breakdown by segment:
-              </p>
-              <div className="mt-3 mb-3 space-y-2">
-                {[
-                  { label: "Enterprise Licensing", value: "$2.08B", growth: "+18.2%", color: "#6366f1", bg: "#eef1ff" },
-                  { label: "Cloud Services", value: "$1.82B", growth: "+31.4%", color: "#10b981", bg: "#d1fae5" },
-                  { label: "Professional Services", value: "$840M", growth: "+12.7%", color: "#f59e0b", bg: "#fef3c7" },
-                ].map((seg) => (
-                  <div
-                    key={seg.label}
-                    className="flex items-center justify-between rounded-[7px] px-3 py-2"
-                    style={{ background: "#f8f9ff", border: "1px solid #e5e7f2" }}
-                  >
-                    <span className="text-[12.5px] font-medium" style={{ color: "#374151" }}>{seg.label}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-[12.5px] font-bold" style={{ color: "#1e1b4b" }}>{seg.value}</span>
-                      <span
-                        className="text-[11px] font-semibold rounded-[4px] px-[6px] py-[1px]"
-                        style={{ color: seg.color, background: seg.bg }}
-                      >
-                        {seg.growth}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+              <div className="text-center">
+                <h2 className="text-[18px] font-bold mb-1" style={{ color: "#1e1b4b" }}>
+                  How can I help you today?
+                </h2>
+                <p className="text-[13px]" style={{ color: "#94a3b8" }}>
+                  Ask anything about your indexed documents
+                </p>
               </div>
-              <p className="text-[13.5px] leading-[1.65]" style={{ color: "#374151" }}>
-                Total Q3 revenue reached <strong>$4.74B</strong>, representing a 22.3% YoY increase
-                <SourceBadge num={2} onClick={() => setSourcesOpen(true)} />. Cloud services remains the highest-growth segment at 31.4%, reflecting continued enterprise adoption
-                <SourceBadge num={3} onClick={() => setSourcesOpen(true)} />.
-              </p>
-
-              {/* Sources footer */}
-              <div
-                className="flex items-center gap-2 mt-3 pt-3 flex-wrap"
-                style={{ borderTop: "1px solid #e5e7f2" }}
-              >
-                <span className="text-[11px]" style={{ color: "#94a3b8" }}>Sources:</span>
-                {sources.map((s) => (
+              <div className="flex flex-wrap gap-2 justify-center">
+                {EXAMPLE_PROMPTS.map((prompt) => (
                   <button
-                    key={s.id}
-                    onClick={() => setSourcesOpen(true)}
-                    className="flex items-center gap-1 rounded-[4px] px-[6px] py-[2px] text-[11px] font-medium transition-colors"
-                    style={{
-                      background: "#f0f3fc",
-                      border: "1px solid #e5e7f2",
-                      color: "#64748b",
-                    }}
+                    key={prompt}
+                    onClick={() => setInput(prompt)}
+                    className="rounded-[8px] px-[14px] py-[8px] text-[12.5px] font-medium transition-colors"
+                    style={{ background: "#fff", border: "1px solid #e5e7f2", color: "#4b5563" }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "#eef1ff";
                       e.currentTarget.style.borderColor = "#c7d2f6";
                       e.currentTarget.style.color = "#6366f1";
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "#f0f3fc";
                       e.currentTarget.style.borderColor = "#e5e7f2";
-                      e.currentTarget.style.color = "#64748b";
+                      e.currentTarget.style.color = "#4b5563";
                     }}
                   >
-                    <svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor" style={{ opacity: 0.6 }}>
-                      <path d="M3 1h7.5L14 4.5V15H3V1z" />
-                    </svg>
-                    {s.filename}
+                    {prompt}
                   </button>
                 ))}
               </div>
             </div>
-
-            {/* Action buttons */}
-            <div className="flex items-center gap-2 mt-2 pl-1">
-              {[
-                { label: "Copy", icon: <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3a1 1 0 00-1-1H3a1 1 0 00-1 1v7a1 1 0 001 1h2" strokeLinecap="round"/></svg> },
-                { label: "Regenerate", icon: <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 8a6 6 0 1011.66-2M2 8V4m0 4H6" strokeLinecap="round" strokeLinejoin="round"/></svg> },
-                { label: "Share", icon: <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="4" r="1.5"/><circle cx="4" cy="8" r="1.5"/><circle cx="12" cy="12" r="1.5"/><path d="M5.5 7l5-2M5.5 9l5 2" strokeLinecap="round"/></svg> },
-              ].map((btn) => (
-                <button
-                  key={btn.label}
-                  className="flex items-center gap-1 rounded-[5px] px-[8px] py-[4px] text-[11.5px] font-medium transition-colors"
-                  style={{ color: "#94a3b8", background: "transparent" }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "#fff";
-                    e.currentTarget.style.color = "#6366f1";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "transparent";
-                    e.currentTarget.style.color = "#94a3b8";
-                  }}
-                >
-                  {btn.icon}
-                  {btn.label}
-                </button>
-              ))}
+          ) : (
+            /* Message list */
+            <div>
+              {messages.map((msg) =>
+                msg.role === "user" ? (
+                  <div key={msg.id} className="flex justify-end mb-4">
+                    <div
+                      className="rounded-[14px] rounded-br-[4px] px-[14px] py-[10px] max-w-[70%]"
+                      style={{ background: "#6366f1" }}
+                    >
+                      <p className="text-white text-[13.5px] leading-[1.55]">{msg.content}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div key={msg.id} className="mb-4 max-w-[85%]">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div
+                        className="flex items-center justify-center rounded-[5px] flex-shrink-0"
+                        style={{ width: 22, height: 22, background: "linear-gradient(135deg,#6366f1,#818cf8)" }}
+                      >
+                        <svg width="10" height="10" viewBox="0 0 16 16" fill="white">
+                          <rect x="1" y="1" width="5.5" height="5.5" rx="1.5" />
+                          <rect x="9.5" y="1" width="5.5" height="5.5" rx="1.5" />
+                          <rect x="1" y="9.5" width="5.5" height="5.5" rx="1.5" />
+                          <rect x="9.5" y="9.5" width="5.5" height="5.5" rx="1.5" />
+                        </svg>
+                      </div>
+                      <span className="text-[12.5px] font-semibold" style={{ color: "#1e1b4b" }}>Lumina</span>
+                    </div>
+                    <div
+                      className="rounded-[14px] rounded-tl-[4px] px-[16px] py-[13px]"
+                      style={{ background: "#fff", border: "1px solid #e5e7f2" }}
+                    >
+                      {msg.pending ? (
+                        <div className="flex items-center gap-[5px]" style={{ height: 22 }}>
+                          {[0, 1, 2].map((i) => (
+                            <span
+                              key={i}
+                              style={{
+                                width: 7,
+                                height: 7,
+                                borderRadius: "50%",
+                                background: "#6366f1",
+                                display: "inline-block",
+                                animation: "lumina-dot-pulse 1.2s ease-in-out infinite",
+                                animationDelay: `${i * 0.2}s`,
+                              }}
+                            />
+                          ))}
+                          <style>{`
+                            @keyframes lumina-dot-pulse {
+                              0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+                              40% { opacity: 1; transform: scale(1); }
+                            }
+                          `}</style>
+                        </div>
+                      ) : (
+                        <p className="text-[13.5px] leading-[1.65]" style={{ color: "#374151" }}>
+                          {msg.content}
+                        </p>
+                      )}
+                    </div>
+                    {!msg.pending && (
+                      <div className="flex items-center gap-2 mt-2 pl-1">
+                        <button
+                          className="flex items-center gap-1 rounded-[5px] px-[8px] py-[4px] text-[11.5px] font-medium transition-colors"
+                          style={{ color: copiedId === msg.id ? "#10b981" : "#94a3b8", background: "transparent" }}
+                          onClick={() => handleCopy(msg)}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "#fff"; if (copiedId !== msg.id) e.currentTarget.style.color = "#6366f1"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; if (copiedId !== msg.id) e.currentTarget.style.color = "#94a3b8"; }}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <rect x="5" y="5" width="9" height="9" rx="1.5" />
+                            <path d="M11 5V3a1 1 0 00-1-1H3a1 1 0 00-1 1v7a1 1 0 001 1h2" strokeLinecap="round" />
+                          </svg>
+                          {copiedId === msg.id ? "Copied!" : "Copy"}
+                        </button>
+                        <button
+                          className="flex items-center gap-1 rounded-[5px] px-[8px] py-[4px] text-[11.5px] font-medium transition-colors"
+                          style={{ color: "#94a3b8", background: "transparent" }}
+                          onClick={handleRegenerate}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "#fff"; e.currentTarget.style.color = "#6366f1"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#94a3b8"; }}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <path d="M2 8a6 6 0 1011.66-2M2 8V4m0 4H6" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                          Regenerate
+                        </button>
+                        <button
+                          className="flex items-center gap-1 rounded-[5px] px-[8px] py-[4px] text-[11.5px] font-medium transition-colors"
+                          style={{ color: "#94a3b8", background: "transparent" }}
+                          onClick={handleShare}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "#fff"; e.currentTarget.style.color = "#6366f1"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#94a3b8"; }}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <circle cx="12" cy="4" r="1.5" />
+                            <circle cx="4" cy="8" r="1.5" />
+                            <circle cx="12" cy="12" r="1.5" />
+                            <path d="M5.5 7l5-2M5.5 9l5 2" strokeLinecap="round" />
+                          </svg>
+                          Share
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              )}
+              <div ref={feedEndRef} />
             </div>
-          </div>
+          )}
         </div>
 
         {/* Input bar */}
-        <div
-          className="flex-shrink-0 px-4 py-3"
-          style={{ background: "#fff", borderTop: "1px solid #e5e7f2" }}
-        >
+        <div className="flex-shrink-0 px-4 py-3" style={{ background: "#fff", borderTop: "1px solid #e5e7f2" }}>
           <div
             className="flex items-end gap-3 rounded-[12px] px-4 py-3"
             style={{ border: "1.5px solid #e5e7f2", background: "#fafbff" }}
           >
             <textarea
               rows={1}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
               placeholder="Ask about any document in your knowledge base…"
               className="flex-1 resize-none bg-transparent outline-none text-[13.5px] leading-[1.5]"
               style={{ color: "#1e1b4b", minHeight: 22 }}
@@ -262,6 +349,7 @@ export function ChatView() {
               <button
                 className="flex items-center justify-center rounded-[6px] transition-colors"
                 style={{ width: 28, height: 28, color: "#94a3b8" }}
+                onClick={handleAttach}
                 onMouseEnter={(e) => (e.currentTarget.style.color = "#6366f1")}
                 onMouseLeave={(e) => (e.currentTarget.style.color = "#94a3b8")}
                 aria-label="Attach file"
@@ -273,6 +361,7 @@ export function ChatView() {
               <button
                 className="flex items-center justify-center rounded-[7px] text-white font-semibold text-[12px] transition-colors"
                 style={{ width: 32, height: 32, background: "#6366f1" }}
+                onClick={() => sendMessage(input)}
                 onMouseEnter={(e) => (e.currentTarget.style.background = "#4f46e5")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "#6366f1")}
                 aria-label="Send"
@@ -284,22 +373,47 @@ export function ChatView() {
             </div>
           </div>
           <p className="text-center text-[11px] mt-2" style={{ color: "#94a3b8" }}>
-            Lumina answers from your indexed documents only · 1,240 docs available
+            Lumina answers from your indexed documents only
           </p>
         </div>
       </div>
 
+      {/* History overlay */}
+      {showHistory && (
+        <div
+          className="flex flex-col flex-shrink-0 overflow-hidden"
+          style={{ width: 280, background: "#fff", borderLeft: "1px solid #e5e7f2" }}
+        >
+          <div
+            className="flex items-center gap-2 px-4 py-3 flex-shrink-0"
+            style={{ borderBottom: "1px solid #e5e7f2" }}
+          >
+            <span className="text-[13px] font-bold flex-1" style={{ color: "#1e1b4b" }}>Chat History</span>
+            <button
+              onClick={() => setShowHistory(false)}
+              className="flex items-center justify-center rounded-[5px] transition-colors"
+              style={{ width: 24, height: 24, color: "#94a3b8" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "#f0f3fc"; e.currentTarget.style.color = "#6366f1"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#94a3b8"; }}
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <line x1="3" y1="3" x2="13" y2="13" />
+                <line x1="13" y1="3" x2="3" y2="13" />
+              </svg>
+            </button>
+          </div>
+          <div className="flex-1 flex items-center justify-center">
+            <span className="text-[13px]" style={{ color: "#94a3b8" }}>No previous chats</span>
+          </div>
+        </div>
+      )}
+
       {/* Sources panel toggle strip */}
-      {!sourcesOpen && (
+      {!sourcesOpen && !showHistory && (
         <button
           onClick={() => setSourcesOpen(true)}
           className="flex flex-col items-center justify-center flex-shrink-0 transition-colors"
-          style={{
-            width: 36,
-            background: "#fff",
-            borderLeft: "1px solid #e5e7f2",
-            color: "#94a3b8",
-          }}
+          style={{ width: 36, background: "#fff", borderLeft: "1px solid #e5e7f2", color: "#94a3b8" }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "#f5f6fb")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
           aria-label="Show sources"
@@ -311,32 +425,7 @@ export function ChatView() {
       )}
 
       {/* Sources panel */}
-      {sourcesOpen && <SourcesPanel sources={sources} onClose={() => setSourcesOpen(false)} />}
+      {sourcesOpen && <SourcesPanel sources={[]} onClose={() => setSourcesOpen(false)} />}
     </div>
-  );
-}
-
-function SourceBadge({ num, onClick }: { num: number; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="inline-flex items-center justify-center rounded-[4px] mx-[2px] font-semibold align-middle transition-colors"
-      style={{
-        width: 16,
-        height: 16,
-        fontSize: 9,
-        background: "#eef1ff",
-        color: "#6366f1",
-        border: "1px solid #c7d2f6",
-        verticalAlign: "middle",
-      }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "#6366f1") && (e.currentTarget.style.color = "#fff")}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = "#eef1ff";
-        e.currentTarget.style.color = "#6366f1";
-      }}
-    >
-      {num}
-    </button>
   );
 }

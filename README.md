@@ -38,7 +38,7 @@ A production-ready, enterprise-grade **Retrieval-Augmented Generation (RAG)** sy
 
 ## 🎯 Overview
 
-**Lumina RAG Engine** bridges the gap between large language models and your private knowledge base. Instead of relying solely on pre-trained data, it:
+** lsg-RAG Engine** bridges the gap between large language models and your private knowledge base. Instead of relying solely on pre-trained data, it:
 
 1. **Indexes** your documents with vector embeddings and full-text search
 2. **Retrieves** the most relevant chunks using hybrid search (semantic + keyword)
@@ -52,7 +52,7 @@ Traditional LLMs suffer from:
 - ❌ **Outdated knowledge** — Can't access real-time or proprietary information
 - ❌ **Lack of traceability** — Can't cite sources
 
-**Lumina** solves these with:
+**lsg-RAG** solves these with:
 - ✅ **Grounded responses** — Answers backed by your actual documents
 - ✅ **Current data** — Access to fresh documents ingested in real-time
 - ✅ **Full citations** — Know exactly which documents were used

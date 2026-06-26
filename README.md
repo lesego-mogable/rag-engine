@@ -1,4 +1,4 @@
-# 🚀 Lumina RAG Engine
+# lsg-RAG Engine
 
 A production-ready, enterprise-grade **Retrieval-Augmented Generation (RAG)** system built with **Next.js**, **FastAPI**, and **Azure AI Services**. Ask questions about your internal documents and get intelligent, grounded answers with full traceability.
 

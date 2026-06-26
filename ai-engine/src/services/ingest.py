@@ -1,9 +1,11 @@
+import io
 import logging
 import os
 import traceback
 from typing import List
 
 import httpx
+import pdfplumber
 from azure.ai.documentintelligence.aio import DocumentIntelligenceClient
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents.aio import SearchClient
@@ -24,17 +26,23 @@ class IngestRequest(BaseModel):
     callback_secret: str
 
 
-def chunk_text(text: str, chunk_size: int = 2000, overlap: int = 200) -> List[str]:
+def chunk_text(text: str, chunk_size: int = 2000, overlap: int = 400) -> List[str]:
+    """Split text into overlapping chunks, breaking at sentence boundaries where possible."""
     chunks = []
     start = 0
     text_length = len(text)
     while start < text_length:
-        end = start + chunk_size
-        chunks.append(text[start:end])
+        end = min(start + chunk_size, text_length)
+        # Try to break at a sentence boundary within the last 200 chars of the chunk
+        if end < text_length:
+            boundary = text.rfind(". ", end - 200, end)
+            if boundary != -1:
+                end = boundary + 1
+        chunks.append(text[start:end].strip())
         if end >= text_length:
             break
         start = end - overlap
-    return chunks
+    return [c for c in chunks if c]
 
 
 async def run_ingestion(
@@ -48,6 +56,18 @@ async def run_ingestion(
     logger.info("[ingest] Starting ingestion document_id=%s blob=%s", document_id, blob_name)
 
     try:
+        # Step 0: Delete any existing chunks for this document to avoid stale data on reindex
+        existing = await search_client.search(
+            search_text="*",
+            filter=f"document_id eq '{document_id}'",
+            select=["id"],
+            top=1000,
+        )
+        old_ids = [r["id"] async for r in existing]
+        if old_ids:
+            await search_client.delete_documents([{"id": id_} for id_ in old_ids])
+            logger.info("[ingest] Deleted %d stale chunks for document_id=%s", len(old_ids), document_id)
+
         # Step 1: Download blob
         connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING", "").strip()
         container_name = os.getenv("AZURE_STORAGE_CONTAINER_NAME", "documents")
@@ -59,28 +79,91 @@ async def run_ingestion(
             blob_bytes = await download_stream.readall()
         logger.info("[ingest] Downloaded %d bytes", len(blob_bytes))
 
-        # Step 2: Extract text via Document Intelligence
-        doc_endpoint = os.getenv("AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT", "").strip()
-        doc_key = os.getenv("AZURE_DOCUMENT_INTELLIGENCE_KEY", "").strip()
-        logger.info("[ingest] Sending to Document Intelligence endpoint=%s", doc_endpoint)
+        # Step 2: Extract text and tables
+        # Use pdfplumber for PDFs (no page limit, accurate table detection).
+        # Fall back to Azure Document Intelligence for non-PDF files (Word, images, etc.).
+        full_text = ""
+        table_chunks: List[str] = []
 
-        async with DocumentIntelligenceClient(
-            endpoint=doc_endpoint,
-            credential=AzureKeyCredential(doc_key),
-        ) as doc_client:
-            poller = await doc_client.begin_analyze_document("prebuilt-read", body=blob_bytes)
-            result = await poller.result()
+        is_pdf = blob_name.lower().endswith(".pdf")
+        if is_pdf:
+            logger.info("[ingest] Extracting with pdfplumber blob=%s", blob_name)
+            with pdfplumber.open(io.BytesIO(blob_bytes)) as pdf:
+                page_texts = []
+                for page_num, page in enumerate(pdf.pages):
+                    # Extract plain text
+                    text = page.extract_text() or ""
+                    page_texts.append(text)
 
-        page_texts = []
-        for page in result.pages:
-            line_texts = [line.content for line in (page.lines or [])]
-            page_texts.append(" ".join(line_texts))
-        full_text = "\n".join(page_texts)
-        logger.info("[ingest] Extracted %d characters across %d pages", len(full_text), len(result.pages))
+                    # Extract tables from this page
+                    for t_idx, table in enumerate(page.extract_tables() or []):
+                        if not table:
+                            continue
+                        header = table[0]
+                        rows = table[1:]
+                        header_line = " | ".join(str(c or "") for c in header)
+                        data_lines = [
+                            " | ".join(str(c or "") for c in row)
+                            for row in rows if any(c for c in row)
+                        ]
+                        if data_lines:
+                            table_chunks.append(
+                                f"Table (page {page_num + 1}):\n{header_line}\n" + "\n".join(data_lines)
+                            )
 
-        # Step 3: Chunk
-        chunks = chunk_text(full_text)
-        logger.info("[ingest] Created %d chunks", len(chunks))
+                full_text = "\n".join(page_texts)
+                logger.info(
+                    "[ingest] pdfplumber extracted %d chars across %d pages, %d table chunks",
+                    len(full_text), len(pdf.pages), len(table_chunks),
+                )
+        else:
+            doc_endpoint = os.getenv("AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT", "").strip()
+            doc_key = os.getenv("AZURE_DOCUMENT_INTELLIGENCE_KEY", "").strip()
+            logger.info("[ingest] Falling back to Document Intelligence for non-PDF blob=%s", blob_name)
+
+            async with DocumentIntelligenceClient(
+                endpoint=doc_endpoint,
+                credential=AzureKeyCredential(doc_key),
+            ) as doc_client:
+                poller = await doc_client.begin_analyze_document("prebuilt-layout", body=blob_bytes)
+                result = await poller.result()
+
+            page_texts = []
+            for page in result.pages:
+                line_texts = [line.content for line in (page.lines or [])]
+                page_texts.append(" ".join(line_texts))
+            full_text = "\n".join(page_texts)
+
+            for t_idx, table in enumerate(result.tables or []):
+                grid: dict[int, dict[int, str]] = {}
+                header_kinds: set[int] = set()
+                for cell in (table.cells or []):
+                    grid.setdefault(cell.row_index, {})[cell.column_index] = cell.content or ""
+                    if getattr(cell, "kind", None) == "columnHeader":
+                        header_kinds.add(cell.row_index)
+                sorted_rows = sorted(grid.keys())
+                if not sorted_rows:
+                    continue
+                header_row_indices = sorted(header_kinds) if header_kinds else [sorted_rows[0]]
+                header_text = "\n".join(
+                    " | ".join(grid[i].get(c, "") for c in sorted(grid[i].keys()))
+                    for i in header_row_indices
+                )
+                data_lines = [
+                    " | ".join(grid[r].get(c, "") for c in sorted(grid[r].keys()))
+                    for r in sorted_rows if r not in header_row_indices
+                ]
+                if data_lines:
+                    table_chunks.append(f"Table {t_idx + 1}:\n{header_text}\n" + "\n".join(data_lines))
+
+            logger.info(
+                "[ingest] Document Intelligence extracted %d chars, %d table chunks",
+                len(full_text), len(table_chunks),
+            )
+
+        # Step 3: Chunk page text + append each table as its own standalone chunk
+        chunks = chunk_text(full_text) + table_chunks
+        logger.info("[ingest] Created %d chunks (%d table chunks)", len(chunks), len(table_chunks))
 
         # Step 4: Embed and upload to AI Search
         embedding_deployment = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "text-embedding-3-small")

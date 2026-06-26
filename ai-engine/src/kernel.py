@@ -94,13 +94,14 @@ async def execute_rag_query(query: str, openai_client: AsyncAzureOpenAI, search_
     embedding_tokens = embedding_response.usage.total_tokens
 
     from azure.search.documents.models import VectorizedQuery
-    vector_query = VectorizedQuery(vector=query_vector, k_nearest_neighbors=3, fields="content_vector")
+    # Use hybrid search: vector similarity + keyword BM25 for better recall
+    vector_query = VectorizedQuery(vector=query_vector, k_nearest_neighbors=6, fields="content_vector")
 
     results = await search_client.search(
-        search_text=None,
+        search_text=query,
         vector_queries=[vector_query],
-        select=["content", "document_id"],
-        top=3,
+        select=["content", "document_id", "blob_name", "chunk_index"],
+        top=6,
     )
 
     chunks = []
@@ -117,7 +118,7 @@ async def execute_rag_query(query: str, openai_client: AsyncAzureOpenAI, search_
             "latency_ms": latency_ms,
         }
 
-    grounding_context = "\n---\n".join(chunks)
+    grounding_context = "\n\n---\n\n".join(chunks)
 
     for attempt in range(3):
         try:
@@ -128,15 +129,21 @@ async def execute_rag_query(query: str, openai_client: AsyncAzureOpenAI, search_
                     {
                         "role": "system",
                         "content": (
-                            "You are an enterprise AI assistant. "
-                            "Answer using ONLY the provided context. "
-                            "If the context does not contain the answer, say you don't know. "
-                            "Do not use external knowledge."
+                            "You are a concise enterprise AI assistant with access to internal documents.\n"
+                            "Rules:\n"
+                            "1. Answer using ONLY the provided context excerpts.\n"
+                            "2. Include ALL relevant details from the context — dates, times, venues, percentages, names.\n"
+                            "3. Always use plain bullet points (- item). Never use markdown tables or numbered lists.\n"
+                            "4. Present information ONCE. Never repeat the same data in multiple formats.\n"
+                            "5. Do not add a 'Summary' section or restate what you just said.\n"
+                            "6. If the context only partially answers the question, give what you have and say what is missing in one sentence.\n"
+                            "7. Never invent information not present in the context.\n"
+                            "8. Keep prose to a minimum — let the bullet points speak for themselves."
                         ),
                     },
                     {
                         "role": "user",
-                        "content": f"Context:\n{grounding_context}\n\nQuestion: {query}",
+                        "content": f"Context excerpts from internal documents:\n\n{grounding_context}\n\nQuestion: {query}",
                     },
                 ],
             )

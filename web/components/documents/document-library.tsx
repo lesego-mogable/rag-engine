@@ -188,6 +188,17 @@ export function DocumentLibrary() {
     setOpenMenuId(null);
   }
 
+  async function retryDocument(id: string) {
+    setOpenMenuId(null);
+    try {
+      await fetch(`/api/documents/${id}/retry`, { method: "POST" });
+      await fetchDocuments();
+      showToast("Re-indexing started");
+    } catch {
+      showToast("Failed to start re-indexing");
+    }
+  }
+
   const statCards = [
     {
       label: "Total Docs",
@@ -490,6 +501,15 @@ export function DocumentLibrary() {
                             minWidth: 130,
                           }}
                         >
+                          <button
+                            className="w-full text-left px-3 py-[7px] text-[12.5px] font-medium transition-colors"
+                            style={{ color: "#6366f1" }}
+                            onClick={() => retryDocument(doc.id)}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = "#f0f3fc")}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                          >
+                            Reindex
+                          </button>
                           <button
                             className="w-full text-left px-3 py-[7px] text-[12.5px] font-medium transition-colors"
                             style={{ color: "#ef4444" }}

@@ -117,7 +117,7 @@ export function Sidebar() {
             <rect x="9.5" y="9.5" width="5.5" height="5.5" rx="1.5" />
           </svg>
         </div>
-        <span className="text-white font-bold text-[14px] tracking-tight">Lumina</span>
+        <span className="text-white font-bold text-[14px] tracking-tight">lsg-RAG</span>
         <span
           className="ml-auto text-white font-bold rounded-[3px] px-[5px] py-[1.5px]"
           style={{ background: "#6366f1", fontSize: "8.5px" }}

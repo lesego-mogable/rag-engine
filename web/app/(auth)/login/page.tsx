@@ -55,7 +55,7 @@ export default function LoginPage() {
             <rect x="9.5" y="9.5" width="5.5" height="5.5" rx="1.5" />
           </svg>
         </div>
-        <span className="font-bold text-[16px]" style={{ color: "#1e1b4b" }}>Lumina</span>
+        <span className="font-bold text-[16px]" style={{ color: "#1e1b4b" }}>lsg-RAG</span>
         <span
           className="text-white font-bold rounded-[3px] px-[5px] py-[1.5px]"
           style={{ background: "#6366f1", fontSize: "8.5px" }}

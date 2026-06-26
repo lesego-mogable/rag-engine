@@ -70,7 +70,7 @@ export default function SignupPage() {
             <rect x="9.5" y="9.5" width="5.5" height="5.5" rx="1.5" />
           </svg>
         </div>
-        <span className="font-bold text-[16px]" style={{ color: "#1e1b4b" }}>Lumina</span>
+        <span className="font-bold text-[16px]" style={{ color: "#1e1b4b" }}>lsg-RAG</span>
         <span
           className="text-white font-bold rounded-[3px] px-[5px] py-[1.5px]"
           style={{ background: "#6366f1", fontSize: "8.5px" }}
@@ -83,7 +83,7 @@ export default function SignupPage() {
         Create your account
       </h1>
       <p className="text-[13px] mb-6" style={{ color: "#94a3b8" }}>
-        Get started with Lumina AI
+        Get started with lsg-RAG AI
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-4">

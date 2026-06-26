@@ -345,7 +345,7 @@ export function ChatView() {
                           <rect x="9.5" y="9.5" width="5.5" height="5.5" rx="1.5" />
                         </svg>
                       </div>
-                      <span className="text-[12.5px] font-semibold" style={{ color: "#1e1b4b" }}>Lumina</span>
+                      <span className="text-[12.5px] font-semibold" style={{ color: "#1e1b4b" }}>lsg-RAG</span>
                     </div>
                     <div
                       className="rounded-[14px] rounded-tl-[4px] px-[16px] py-[13px]"
@@ -475,7 +475,7 @@ export function ChatView() {
             </div>
           </div>
           <p className="text-center text-[11px] mt-2" style={{ color: "#94a3b8" }}>
-            Lumina answers from your indexed documents only
+            lsg-RAG answers from your indexed documents only
           </p>
         </div>
       </div>

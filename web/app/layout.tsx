@@ -3,7 +3,7 @@ import "./globals.css";
 import { Providers } from "@/lib/providers";
 
 export const metadata: Metadata = {
-  title: "Lumina AI — Enterprise RAG",
+  title: "lsg-RAG",
   description: "AI-powered enterprise knowledge assistant",
 };
 

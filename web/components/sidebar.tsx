@@ -58,11 +58,18 @@ const navItems = [
   },
 ];
 
+interface ChatSummary {
+  id: string;
+  title: string;
+  updatedAt: string;
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const [recentChats, setRecentChats] = useState<ChatSummary[]>([]);
 
   const userName = session?.user?.name ?? "—";
   const userRole = session?.user?.role ?? "viewer";
@@ -78,6 +85,19 @@ export function Sidebar() {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [showUserMenu]);
+
+  useEffect(() => {
+    if (!pathname.startsWith("/chat")) return;
+    function loadChats() {
+      fetch("/api/chats")
+        .then((r) => r.ok ? r.json() : [])
+        .then(setRecentChats)
+        .catch(() => {});
+    }
+    loadChats();
+    window.addEventListener("chat-saved", loadChats);
+    return () => window.removeEventListener("chat-saved", loadChats);
+  }, [pathname]);
 
   return (
     <aside
@@ -110,9 +130,8 @@ export function Sidebar() {
 
       {/* New Chat */}
       <div className="px-[10px] pb-2">
-        <Link
-          href="/chat"
-          className="flex items-center justify-center gap-[6px] rounded-[6px] py-[7px] px-[10px] font-semibold text-[12px] transition-colors"
+        <button
+          className="flex items-center justify-center gap-[6px] rounded-[6px] py-[7px] px-[10px] font-semibold text-[12px] transition-colors w-full"
           style={{
             border: "1px solid rgba(99,102,241,.3)",
             background: "rgba(99,102,241,.15)",
@@ -120,13 +139,14 @@ export function Sidebar() {
           }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(99,102,241,.25)")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(99,102,241,.15)")}
+          onClick={() => window.dispatchEvent(new Event("new-chat"))}
         >
           <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
             <line x1="8" y1="2" x2="8" y2="14" />
             <line x1="2" y1="8" x2="14" y2="8" />
           </svg>
           New Chat
-        </Link>
+        </button>
       </div>
 
       {/* Nav */}
@@ -177,12 +197,36 @@ export function Sidebar() {
             >
               Recent
             </div>
-            <div
-              className="px-[9px] py-[5px] text-left"
-              style={{ fontSize: "11.5px", color: "rgba(255,255,255,.28)", fontWeight: 400 }}
-            >
-              No recent chats
-            </div>
+            {recentChats.length === 0 ? (
+              <div
+                className="px-[9px] py-[5px] text-left"
+                style={{ fontSize: "11.5px", color: "rgba(255,255,255,.28)", fontWeight: 400 }}
+              >
+                No recent chats
+              </div>
+            ) : (
+              recentChats.slice(0, 8).map((chat) => (
+                <button
+                  key={chat.id}
+                  className="flex items-center gap-2 rounded-[5px] px-[9px] py-[6px] text-[12px] font-normal transition-colors w-full text-left truncate"
+                  style={{ color: "rgba(255,255,255,.42)" }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "rgba(255,255,255,.07)";
+                    e.currentTarget.style.color = "rgba(255,255,255,.8)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "transparent";
+                    e.currentTarget.style.color = "rgba(255,255,255,.42)";
+                  }}
+                  onClick={() => window.dispatchEvent(new CustomEvent("load-chat", { detail: chat.id }))}
+                >
+                  <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" style={{ flexShrink: 0, opacity: 0.6 }}>
+                    <path d="M2 2h12a1 1 0 011 1v8a1 1 0 01-1 1H5L2 14V3a1 1 0 011-1z" />
+                  </svg>
+                  <span className="truncate">{chat.title}</span>
+                </button>
+              ))
+            )}
           </>
         )}
       </nav>

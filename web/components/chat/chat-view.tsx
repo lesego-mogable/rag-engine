@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { SourcesPanel } from "./sources-panel";
 import { UserAvatar } from "@/components/user-avatar";
 
@@ -11,10 +11,16 @@ interface Message {
   pending?: boolean;
 }
 
+interface ChatSummary {
+  id: string;
+  title: string;
+  updatedAt: string;
+}
+
 const EXAMPLE_PROMPTS = [
-  "Summarise Q3 earnings",
-  "What is our vacation policy?",
-  "APAC expansion milestones",
+  "Summarise this document",
+  "What are the key topics covered?",
+  "What are the main requirements?",
 ];
 
 export function ChatView() {
@@ -24,12 +30,39 @@ export function ChatView() {
   const [showHistory, setShowHistory] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [shareToast, setShareToast] = useState(false);
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const [chatHistory, setChatHistory] = useState<ChatSummary[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const feedEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     feedEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const fetchHistory = useCallback(async () => {
+    const res = await fetch("/api/chats");
+    if (res.ok) {
+      setChatHistory(await res.json());
+      window.dispatchEvent(new Event("chat-saved"));
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
+
+  useEffect(() => {
+    window.addEventListener("new-chat", handleNewChat);
+    return () => window.removeEventListener("new-chat", handleNewChat);
+  }, []);
+
+  useEffect(() => {
+    function onLoadChat(e: Event) {
+      loadChat((e as CustomEvent<string>).detail);
+    }
+    window.addEventListener("load-chat", onLoadChat);
+    return () => window.removeEventListener("load-chat", onLoadChat);
+  }, []);
 
   async function sendMessage(text: string) {
     const trimmed = text.trim();
@@ -43,6 +76,31 @@ export function ChatView() {
     ]);
     setInput("");
 
+    // Create a new chat session on the first message
+    let chatId = currentChatId;
+    if (!chatId) {
+      const chatRes = await fetch("/api/chats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: trimmed }),
+      });
+      if (chatRes.ok) {
+        const chat = await chatRes.json();
+        chatId = chat.id;
+        setCurrentChatId(chatId);
+        fetchHistory();
+      }
+    }
+
+    // Save user message
+    if (chatId) {
+      await fetch(`/api/chats/${chatId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: "user", content: trimmed }),
+      });
+    }
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -54,6 +112,16 @@ export function ChatView() {
       setMessages((prev) =>
         prev.map((m) => m.id === assistantId ? { ...m, content: answer, pending: false } : m)
       );
+
+      // Save assistant message
+      if (chatId) {
+        await fetch(`/api/chats/${chatId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role: "assistant", content: answer }),
+        });
+        fetchHistory();
+      }
     } catch {
       setMessages((prev) =>
         prev.map((m) =>
@@ -61,6 +129,21 @@ export function ChatView() {
         )
       );
     }
+  }
+
+  async function loadChat(id: string) {
+    const res = await fetch(`/api/chats/${id}`);
+    if (!res.ok) return;
+    const chat = await res.json();
+    setCurrentChatId(id);
+    setMessages(
+      chat.messages.map((m: { id: string; role: string; content: string }) => ({
+        id: m.id,
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      }))
+    );
+    setShowHistory(false);
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -73,6 +156,7 @@ export function ChatView() {
   function handleNewChat() {
     setMessages([]);
     setInput("");
+    setCurrentChatId(null);
     setSourcesOpen(false);
   }
 
@@ -413,8 +497,40 @@ export function ChatView() {
               </svg>
             </button>
           </div>
-          <div className="flex-1 flex items-center justify-center">
-            <span className="text-[13px]" style={{ color: "#94a3b8" }}>No previous chats</span>
+          <div className="flex-1 overflow-y-auto py-2 scrollbar-thin">
+            {chatHistory.length === 0 ? (
+              <div className="flex items-center justify-center h-full">
+                <span className="text-[13px]" style={{ color: "#94a3b8" }}>No previous chats</span>
+              </div>
+            ) : (
+              chatHistory.map((chat) => (
+                <button
+                  key={chat.id}
+                  onClick={() => loadChat(chat.id)}
+                  className="w-full text-left px-4 py-[10px] transition-colors"
+                  style={{
+                    background: currentChatId === chat.id ? "#f0f3fc" : "transparent",
+                    borderLeft: currentChatId === chat.id ? "2px solid #6366f1" : "2px solid transparent",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (currentChatId !== chat.id) e.currentTarget.style.background = "#f8f9ff";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (currentChatId !== chat.id) e.currentTarget.style.background = "transparent";
+                  }}
+                >
+                  <p
+                    className="text-[12.5px] font-medium truncate"
+                    style={{ color: currentChatId === chat.id ? "#6366f1" : "#1e1b4b" }}
+                  >
+                    {chat.title}
+                  </p>
+                  <p className="text-[11px] mt-[2px]" style={{ color: "#94a3b8" }}>
+                    {new Date(chat.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </button>
+              ))
+            )}
           </div>
         </div>
       )}

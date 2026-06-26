@@ -255,7 +255,7 @@ AZURE_DOCUMENT_INTELLIGENCE_API_KEY=your-key
 **web/.env.local:**
 ```env
 # Database (auto-configured in docker-compose)
-DATABASE_URL=postgresql://lumina_dev:lumina_password@db:5432/lumina_db
+DATABASE_URL=postgresql://lsg-RAG_dev:lsg-RAG_password@db:5432/lsg-RAG_db
 
 # Authentication
 NEXTAUTH_SECRET=your-generated-secret
@@ -300,9 +300,9 @@ docker-compose ps
 ### Database Configuration
 PostgreSQL is configured via environment variables in `docker-compose.yml`:
 ```yaml
-POSTGRES_USER: lumina_dev
-POSTGRES_PASSWORD: lumina_password
-POSTGRES_DB: lumina_db
+POSTGRES_USER: lsg-RAG_dev
+POSTGRES_PASSWORD: lsg-RAG_password
+POSTGRES_DB: lsg-RAG_db
 ```
 
 **To use an external database:**
@@ -653,12 +653,12 @@ web/
 docker-compose build
 
 # Push to Azure Container Registry
-az acr build --registry $REGISTRY_NAME --image lumina:latest .
+az acr build --registry $REGISTRY_NAME --image lsg-RAG:latest .
 
 # Deploy with docker-compose
 az container create \
   --resource-group myResourceGroup \
-  --name lumina-rag \
+  --name lsg-RAG-rag \
   --image-registry-login-server \
   --file docker-compose.yml
 ```
@@ -670,7 +670,7 @@ az container create \
 kubectl apply -f k8s/deployment.yaml
 
 # Expose service
-kubectl expose deployment lumina-web --type=LoadBalancer --port=80 --target-port=3000
+kubectl expose deployment lsg-RAG-web --type=LoadBalancer --port=80 --target-port=3000
 ```
 
 ### Environment Variables for Production
@@ -682,7 +682,7 @@ NEXTAUTH_SECRET=$(openssl rand -base64 32)
 AZURE_OPENAI_API_KEY=<from-azure-keyvault>
 
 # Use production database
-DATABASE_URL=postgresql://prod-user:prod-pwd@prod-server.postgres.database.azure.com/lumina_prod
+DATABASE_URL=postgresql://prod-user:prod-pwd@prod-server.postgres.database.azure.com/lsg-RAG_prod
 
 # Disable debug
 DEBUG=false
@@ -855,6 +855,6 @@ If you find a security vulnerability, please email lesegomogable@gmail.com inste
 
 [GitHub](https://github.com/lesego-mogable/rag-engine) • [Documentation](./docs) • [Issues](https://github.com/lesego-mogable/rag-engine/issues)
 
-Made with ❤️ by the Lumina team
+Made with ❤️ by the lsgmgbl
 
 </div>

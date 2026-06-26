@@ -278,17 +278,7 @@ export function ChatView() {
           {!hasMessages ? (
             /* Empty / welcome state */
             <div className="flex flex-col items-center justify-center h-full gap-5">
-              <div
-                className="flex items-center justify-center rounded-[12px]"
-                style={{ width: 52, height: 52, background: "linear-gradient(135deg,#6366f1,#818cf8)" }}
-              >
-                <svg width="24" height="24" viewBox="0 0 16 16" fill="white">
-                  <rect x="1" y="1" width="5.5" height="5.5" rx="1.5" />
-                  <rect x="9.5" y="1" width="5.5" height="5.5" rx="1.5" />
-                  <rect x="1" y="9.5" width="5.5" height="5.5" rx="1.5" />
-                  <rect x="9.5" y="9.5" width="5.5" height="5.5" rx="1.5" />
-                </svg>
-              </div>
+              <img src="/logo-512.png" alt="lsg-RAG" style={{ width: 52, height: 52, borderRadius: 12 }} />
               <div className="text-center">
                 <h2 className="text-[18px] font-bold mb-1" style={{ color: "#1e1b4b" }}>
                   How can I help you today?
@@ -336,14 +326,9 @@ export function ChatView() {
                     <div className="flex items-center gap-2 mb-2">
                       <div
                         className="flex items-center justify-center rounded-[5px] flex-shrink-0"
-                        style={{ width: 22, height: 22, background: "linear-gradient(135deg,#6366f1,#818cf8)" }}
+                        style={{ width: 22, height: 22 }}
                       >
-                        <svg width="10" height="10" viewBox="0 0 16 16" fill="white">
-                          <rect x="1" y="1" width="5.5" height="5.5" rx="1.5" />
-                          <rect x="9.5" y="1" width="5.5" height="5.5" rx="1.5" />
-                          <rect x="1" y="9.5" width="5.5" height="5.5" rx="1.5" />
-                          <rect x="9.5" y="9.5" width="5.5" height="5.5" rx="1.5" />
-                        </svg>
+                        <img src="/logo-32.png" alt="lsg-RAG" style={{ width: 22, height: 22, borderRadius: 5 }} />
                       </div>
                       <span className="text-[12.5px] font-semibold" style={{ color: "#1e1b4b" }}>lsg-RAG</span>
                     </div>

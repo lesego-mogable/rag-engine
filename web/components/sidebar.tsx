@@ -106,17 +106,7 @@ export function Sidebar() {
     >
       {/* Logo */}
       <div className="flex items-center gap-2 px-[14px] pt-[15px] pb-3">
-        <div
-          className="flex items-center justify-center flex-shrink-0 rounded-[6px]"
-          style={{ width: 27, height: 27, background: "linear-gradient(135deg,#6366f1,#818cf8)" }}
-        >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="white">
-            <rect x="1" y="1" width="5.5" height="5.5" rx="1.5" />
-            <rect x="9.5" y="1" width="5.5" height="5.5" rx="1.5" />
-            <rect x="1" y="9.5" width="5.5" height="5.5" rx="1.5" />
-            <rect x="9.5" y="9.5" width="5.5" height="5.5" rx="1.5" />
-          </svg>
-        </div>
+        <img src="/logo-32.png" alt="lsg-RAG" style={{ width: 27, height: 27, borderRadius: 6, flexShrink: 0 }} />
         <span className="text-white font-bold text-[14px] tracking-tight">lsg-RAG</span>
         <span
           className="ml-auto text-white font-bold rounded-[3px] px-[5px] py-[1.5px]"

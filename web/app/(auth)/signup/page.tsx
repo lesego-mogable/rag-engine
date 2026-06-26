@@ -59,17 +59,7 @@ export default function SignupPage() {
     >
       {/* Logo */}
       <div className="flex items-center gap-2 mb-8">
-        <div
-          className="flex items-center justify-center rounded-[6px]"
-          style={{ width: 32, height: 32, background: "linear-gradient(135deg,#6366f1,#818cf8)" }}
-        >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="white">
-            <rect x="1" y="1" width="5.5" height="5.5" rx="1.5" />
-            <rect x="9.5" y="1" width="5.5" height="5.5" rx="1.5" />
-            <rect x="1" y="9.5" width="5.5" height="5.5" rx="1.5" />
-            <rect x="9.5" y="9.5" width="5.5" height="5.5" rx="1.5" />
-          </svg>
-        </div>
+        <img src="/logo-64.png" alt="lsg-RAG" style={{ width: 32, height: 32, borderRadius: 6 }} />
         <span className="font-bold text-[16px]" style={{ color: "#1e1b4b" }}>lsg-RAG</span>
         <span
           className="text-white font-bold rounded-[3px] px-[5px] py-[1.5px]"

@@ -30,25 +30,30 @@ model Chat {
 }
 
 model ChatMessage {
-  id        String   @id @default(cuid())
-  chatId    String
-  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  role      String
-  content   String
-  createdAt DateTime @default(now())
+  id              String   @id @default(cuid())
+  chatId          String
+  chat            Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  role            String
+  content         String
+  inputTokens     Int?
+  outputTokens    Int?
+  embeddingTokens Int?
+  latencyMs       Int?
+  createdAt       DateTime @default(now())
 }
 
 model Document {
-  id           String   @id @default(cuid())
-  name         String
-  size         Int
-  type         String
-  blobName     String   @unique
-  status       String   @default("queued")
-  chunkCount   Int?
-  errorMsg     String?
-  uploadedById String
-  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(cuid())
+  name            String
+  size            Int
+  type            String
+  blobName        String   @unique
+  status          String   @default("queued")
+  chunkCount      Int?
+  embeddingTokens Int?
+  errorMsg        String?
+  uploadedById    String
+  uploadedBy      User     @relation(fields: [uploadedById], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }

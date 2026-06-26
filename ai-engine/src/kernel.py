@@ -79,15 +79,19 @@ async def initialize_rag_kernel():
     return openai_client, search_client
 
 
-async def execute_rag_query(query: str, openai_client: AsyncAzureOpenAI, search_client: SearchClient) -> str:
+async def execute_rag_query(query: str, openai_client: AsyncAzureOpenAI, search_client: SearchClient) -> dict:
+    import time
     embedding_deployment = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "text-embedding-3-small")
     chat_deployment = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT", "gpt-4.1-mini")
+
+    t_start = time.monotonic()
 
     embedding_response = await openai_client.embeddings.create(
         input=query,
         model=embedding_deployment,
     )
     query_vector = embedding_response.data[0].embedding
+    embedding_tokens = embedding_response.usage.total_tokens
 
     from azure.search.documents.models import VectorizedQuery
     vector_query = VectorizedQuery(vector=query_vector, k_nearest_neighbors=3, fields="content_vector")
@@ -104,7 +108,14 @@ async def execute_rag_query(query: str, openai_client: AsyncAzureOpenAI, search_
         chunks.append(result["content"])
 
     if not chunks:
-        return "I could not find any relevant information in the internal knowledge base."
+        latency_ms = int((time.monotonic() - t_start) * 1000)
+        return {
+            "answer": "I could not find any relevant information in the internal knowledge base.",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "embedding_tokens": embedding_tokens,
+            "latency_ms": latency_ms,
+        }
 
     grounding_context = "\n---\n".join(chunks)
 
@@ -129,7 +140,15 @@ async def execute_rag_query(query: str, openai_client: AsyncAzureOpenAI, search_
                     },
                 ],
             )
-            return completion.choices[0].message.content
+            latency_ms = int((time.monotonic() - t_start) * 1000)
+            usage = completion.usage
+            return {
+                "answer": completion.choices[0].message.content,
+                "input_tokens": usage.prompt_tokens if usage else 0,
+                "output_tokens": usage.completion_tokens if usage else 0,
+                "embedding_tokens": embedding_tokens,
+                "latency_ms": latency_ms,
+            }
         except NotFoundError:
             if attempt < 2:
                 wait = 2 ** attempt

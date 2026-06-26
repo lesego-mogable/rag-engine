@@ -85,12 +85,14 @@ async def run_ingestion(
         # Step 4: Embed and upload to AI Search
         embedding_deployment = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "text-embedding-3-small")
         documents = []
+        total_embedding_tokens = 0
         for i, chunk in enumerate(chunks):
             embedding_response = await openai_client.embeddings.create(
                 input=chunk,
                 model=embedding_deployment,
             )
             vector = embedding_response.data[0].embedding
+            total_embedding_tokens += embedding_response.usage.total_tokens
             documents.append({
                 "id": f"{document_id}-chunk-{i}",
                 "content": chunk,
@@ -103,13 +105,13 @@ async def run_ingestion(
                 logger.info("[ingest] Embedded %d/%d chunks", i + 1, len(chunks))
 
         await search_client.upload_documents(documents=documents)
-        logger.info("[ingest] Uploaded %d documents to AI Search", len(documents))
+        logger.info("[ingest] Uploaded %d documents to AI Search, total_embedding_tokens=%d", len(documents), total_embedding_tokens)
 
         # Step 5: Callback — success
         async with httpx.AsyncClient() as http_client:
             resp = await http_client.patch(
                 callback_url,
-                json={"status": "indexed", "chunk_count": len(chunks), "secret": callback_secret},
+                json={"status": "indexed", "chunk_count": len(chunks), "embedding_tokens": total_embedding_tokens, "secret": callback_secret},
             )
             logger.info("[ingest] Callback response status=%d", resp.status_code)
 

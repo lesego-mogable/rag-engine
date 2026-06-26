@@ -26,5 +26,11 @@ export async function POST(req: Request) {
   }
 
   const data = await res.json();
-  return NextResponse.json({ answer: data.answer });
+  return NextResponse.json({
+    answer: data.answer,
+    inputTokens: data.input_tokens ?? 0,
+    outputTokens: data.output_tokens ?? 0,
+    embeddingTokens: data.embedding_tokens ?? 0,
+    latencyMs: data.latency_ms ?? 0,
+  });
 }

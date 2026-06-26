@@ -113,12 +113,19 @@ export function ChatView() {
         prev.map((m) => m.id === assistantId ? { ...m, content: answer, pending: false } : m)
       );
 
-      // Save assistant message
+      // Save assistant message with metrics
       if (chatId) {
+        const saveBody: Record<string, unknown> = { role: "assistant", content: answer };
+        if (res.ok) {
+          saveBody.inputTokens = data.inputTokens ?? null;
+          saveBody.outputTokens = data.outputTokens ?? null;
+          saveBody.embeddingTokens = data.embeddingTokens ?? null;
+          saveBody.latencyMs = data.latencyMs ?? null;
+        }
         await fetch(`/api/chats/${chatId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ role: "assistant", content: answer }),
+          body: JSON.stringify(saveBody),
         });
         fetchHistory();
       }

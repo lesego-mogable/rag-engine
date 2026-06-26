@@ -20,10 +20,18 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { role, content } = await req.json();
+  const { role, content, inputTokens, outputTokens, embeddingTokens, latencyMs } = await req.json();
 
   const message = await prisma.chatMessage.create({
-    data: { chatId: params.id, role, content },
+    data: {
+      chatId: params.id,
+      role,
+      content,
+      inputTokens: inputTokens ?? null,
+      outputTokens: outputTokens ?? null,
+      embeddingTokens: embeddingTokens ?? null,
+      latencyMs: latencyMs ?? null,
+    },
   });
 
   await prisma.chat.update({

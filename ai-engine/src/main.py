@@ -43,6 +43,10 @@ class QueryRequest(BaseModel):
 
 class QueryResponse(BaseModel):
     answer: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    embedding_tokens: int = 0
+    latency_ms: int = 0
 
 
 @app.post("/api/v1/query", response_model=QueryResponse)
@@ -54,12 +58,12 @@ async def query_enterprise_data(body: QueryRequest, request: Request):
         raise HTTPException(status_code=503, detail="AI Engine is not initialized.")
 
     try:
-        answer = await execute_rag_query(
+        result = await execute_rag_query(
             query=body.query,
             openai_client=openai_client,
             search_client=search_client,
         )
-        return QueryResponse(answer=answer)
+        return QueryResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
